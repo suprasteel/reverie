@@ -1,7 +1,6 @@
 use back::{LogsStore, Page, ProjectLog};
 use clap::{Args, Parser};
 use itertools::Itertools;
-
 // /// Six0One 601 > log
 // #[derive(Debug, Parser)]
 // #[command(name = "Six0One")]
@@ -9,19 +8,16 @@ use itertools::Itertools;
 //     project: String,
 //     content: String,
 // }
-
 #[derive(Debug, clap::Subcommand)]
 pub enum CmdArgs {
-    AddLog(ProjectLogArg),
+    Log(ProjectLogArg),
     List(ListArg),
 }
-
 #[derive(Debug, Parser)]
 pub struct ProjectLogArg {
     project: String,
     content: String,
 }
-
 #[derive(Debug, Args, Clone)]
 pub struct PageArg {
     #[clap(short, long, default_value = "1")]
@@ -34,50 +30,34 @@ impl From<ProjectLogArg> for ProjectLog {
         Self::new(project, content)
     }
 }
-
 impl From<PageArg> for Page {
     fn from(PageArg { page, size }: PageArg) -> Self {
         Self::new(page, size)
     }
 }
-
 #[derive(Debug, Args)]
 pub struct ListArg {
     project: String,
     #[clap(flatten)]
     page: PageArg,
 }
-
 #[derive(Debug, Parser)]
 pub struct CliArgs {
     #[clap(subcommand)]
     cmd: CmdArgs,
 }
-
 fn main() {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
         .init();
-
     let db = home::home_dir().unwrap().join("s0O.db");
     let mut store = LogsStore::load(&db);
-
     match CliArgs::parse().cmd {
-        CmdArgs::AddLog(pl) => store.add(pl.into()),
+        CmdArgs::Log(pl) => store.add(pl.into()),
         CmdArgs::List(ListArg { project, page }) => {
-            println!(
-                "{}",
-                store
-                    .get(
-                        project,
-                        page.into() // Page::new(1, 2)
-                    )
-                    .iter()
-                    .join("\n")
-            )
+            println!("{}", store.get(project, &page.into()).iter().join("\n"))
         }
     }
-
     store.save(&db);
 }
 
