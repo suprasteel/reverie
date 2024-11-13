@@ -1,5 +1,5 @@
 use back::{LogsStore, Page, ProjectLog};
-use clap::Parser;
+use clap::{Args, Parser};
 use itertools::Itertools;
 
 // /// Six0One 601 > log
@@ -10,20 +10,25 @@ use itertools::Itertools;
 //     content: String,
 // }
 
+#[derive(Debug, clap::Subcommand)]
+pub enum CmdArgs {
+    AddLog(ProjectLogArg),
+    List(ListArg),
+}
+
 #[derive(Debug, Parser)]
 pub struct ProjectLogArg {
     project: String,
     content: String,
 }
 
-#[derive(Debug, Parser, Clone)]
+#[derive(Debug, Args, Clone)]
 pub struct PageArg {
-    #[clap(short, long)]
+    #[clap(short, long, default_value = "1")]
     page: usize,
-    #[clap(short, long)]
+    #[clap(short, long, default_value = "5")]
     size: usize,
 }
-
 impl From<ProjectLogArg> for ProjectLog {
     fn from(ProjectLogArg { project, content }: ProjectLogArg) -> Self {
         Self::new(project, content)
@@ -36,16 +41,11 @@ impl From<PageArg> for Page {
     }
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Args)]
 pub struct ListArg {
     project: String,
-    // page: PageArg,
-}
-
-#[derive(Debug, clap::Subcommand)]
-pub enum CmdArgs {
-    AddLog(ProjectLogArg),
-    List(ListArg),
+    #[clap(flatten)]
+    page: PageArg,
 }
 
 #[derive(Debug, Parser)]
@@ -59,18 +59,26 @@ fn main() {
         .with_max_level(tracing::Level::TRACE)
         .init();
 
-    let mut store = LogsStore::load();
+    let db = home::home_dir().unwrap().join("s0O.db");
+    let mut store = LogsStore::load(&db);
 
     match CliArgs::parse().cmd {
         CmdArgs::AddLog(pl) => store.add(pl.into()),
-        CmdArgs::List(ListArg {
-            project, /*, page*/
-        }) => {
-            println!("{}", store.get(project, Page::new(1, 2)).iter().join("\n"))
+        CmdArgs::List(ListArg { project, page }) => {
+            println!(
+                "{}",
+                store
+                    .get(
+                        project,
+                        page.into() // Page::new(1, 2)
+                    )
+                    .iter()
+                    .join("\n")
+            )
         }
     }
 
-    store.save();
+    store.save(&db);
 }
 
 // we have projects

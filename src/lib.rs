@@ -1,7 +1,11 @@
-use std::{collections::HashMap, fs::File, io::Read};
+use std::{
+    collections::HashMap,
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 use serde::{Deserialize, Serialize};
-use tracing::instrument;
+use tracing::{info, instrument, warn};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectLog {
@@ -14,38 +18,46 @@ impl ProjectLog {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct LogsStore {
     store: HashMap<String, Vec<String>>,
 }
-pub fn db() -> File {
-    let path = home::home_dir().unwrap().join("s0O.db");
-
-    match std::fs::File::options()
-        .append(true)
-        .truncate(false)
-        .read(true)
-        .open(&path)
-    {
-        Ok(file) => file,
-        _ => std::fs::File::create_new(path).unwrap(),
-    }
-}
 impl LogsStore {
-    pub fn load() -> Self {
-        let mut data = Vec::new();
-        db().read_to_end(&mut data).unwrap();
-        let data = serde_cbor::from_slice(&data);
-        let mut store = Self::default();
-        for plog in data.into_iter() {
-            store.add(plog);
+    pub fn load<P: AsRef<Path>>(path: P) -> Self {
+        let path = path.as_ref();
+        if !path.exists() {
+            return LogsStore::default();
         }
+
+        let db = std::fs::File::options()
+            .truncate(false)
+            .read(true)
+            .open(path)
+            .unwrap();
+
+        let store = serde_json::from_reader(db)
+            .map_err(|e| warn!("{e}"))
+            .unwrap_or_default();
+        info!("{:?}", store);
         store
     }
-
-    pub fn save(self) {
-        let data = self.store.into_iter().collect::<Vec<_>>();
-        serde_cbor::to_writer(&mut db(), &data).unwrap();
+    pub fn save<P: AsRef<Path>>(self, path: P) {
+        if self.store.is_empty() {
+            return;
+        }
+        let path = path.as_ref();
+        let mut file = match std::fs::File::options()
+            .write(true)
+            .truncate(true)
+            .open(path)
+        {
+            Ok(file) => file,
+            Err(_) => std::fs::File::create_new(path).expect("Cannot create db"),
+        };
+        serde_json::to_writer(&mut file, &self)
+            .map_err(|e| warn!("{e}"))
+            .unwrap_or_default();
+        info!("{:?}", self);
     }
     #[instrument(level = "info")]
     pub fn add(&mut self, log: ProjectLog) {
@@ -56,6 +68,7 @@ impl LogsStore {
             self.store.insert(project, vec![content]);
         }
     }
+    #[instrument(level = "info")]
     pub fn get(&self, project: String, page: Page) -> Vec<String> {
         self.store
             .get(&project)
