@@ -37,7 +37,7 @@ impl LogsStore {
         info!("{:?}", store);
         store
     }
-    pub fn save<P: AsRef<Path>>(self, path: P) {
+    pub fn save<P: AsRef<Path>>(&self, path: P) {
         if self.store.is_empty() {
             return;
         }
@@ -65,14 +65,14 @@ impl LogsStore {
         }
     }
     #[instrument(level = "info")]
-    pub fn get(&self, project: String, page: &Page) -> Vec<String> {
+    pub fn get(&self, project: String, page: &Page) -> Paged<String> {
         self.store
             .get(&project)
             .map(|list| list.get(page))
             .unwrap_or_default()
     }
 }
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Page {
     page: usize,
     size: usize,
@@ -90,19 +90,35 @@ impl Page {
         self.page
     }
 }
+#[derive(Serialize)]
+pub struct Paged<T> {
+    pub page: usize,
+    pub data: Vec<T>,
+}
+impl<T> Default for Paged<T> {
+    fn default() -> Self {
+        Paged {
+            page: 1,
+            data: vec![],
+        }
+    }
+}
 pub trait Paginable {
     type Output;
-    fn get(&self, page: &Page) -> Vec<Self::Output>;
+    fn get(&self, page: &Page) -> Paged<Self::Output>;
 }
 impl<T> Paginable for Vec<T>
 where
     T: Clone,
 {
     type Output = T;
-    fn get(&self, page: &Page) -> Vec<Self::Output> {
+    fn get(&self, page: &Page) -> Paged<Self::Output> {
         let Page { page, size } = page;
         if self.len() < *size {
-            return self.to_vec();
+            return Paged {
+                page: 1,
+                data: self.to_vec(),
+            };
         }
         let pages_count = (self.len() / size) + 1;
         let page = if *page > pages_count {
@@ -111,6 +127,9 @@ where
             *page
         };
         let offset = (page - 1) * size;
-        self[offset..(offset + size)].to_vec()
+        Paged {
+            page,
+            data: self[offset..(offset + size)].to_vec(),
+        }
     }
 }

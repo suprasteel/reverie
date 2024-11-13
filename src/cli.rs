@@ -55,7 +55,10 @@ fn main() {
     match CliArgs::parse().cmd {
         CmdArgs::Log(pl) => store.add(pl.into()),
         CmdArgs::List(ListArg { project, page }) => {
-            println!("{}", store.get(project, &page.into()).iter().join("\n"))
+            println!(
+                "{}",
+                store.get(project, &page.into()).data.iter().join("\n")
+            )
         }
     }
     store.save(&db);
