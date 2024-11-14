@@ -8,10 +8,33 @@ use itertools::Itertools;
 //     project: String,
 //     content: String,
 // }
+#[derive(Debug, Parser)]
+pub struct CliArgs {
+    #[clap(subcommand)]
+    cmd: CmdArgs,
+    #[clap(short, long, default_value = "default")]
+    project: String,
+}
 #[derive(Debug, clap::Subcommand)]
 pub enum CmdArgs {
-    Log(ProjectLogArg),
-    List(ListArg),
+    #[clap(subcommand)]
+    New(NewArgs),
+    List(PageArg),
+}
+#[derive(Debug, clap::Subcommand)]
+pub enum NewArgs {
+    Log(LogArg),
+    Other(LogArg),
+}
+#[derive(Debug, Args, Clone)]
+pub struct LogArg {
+    #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
+    value: Vec<String>,
+}
+impl From<LogArg> for String {
+    fn from(LogArg { value }: LogArg) -> Self {
+        value.join(" ").to_string()
+    }
 }
 #[derive(Debug, Parser)]
 pub struct ProjectLogArg {
@@ -35,26 +58,19 @@ impl From<PageArg> for Page {
         Self::new(page, size)
     }
 }
-#[derive(Debug, Args)]
-pub struct ListArg {
-    project: String,
-    #[clap(flatten)]
-    page: PageArg,
-}
-#[derive(Debug, Parser)]
-pub struct CliArgs {
-    #[clap(subcommand)]
-    cmd: CmdArgs,
-}
 fn main() {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
         .init();
     let db = home::home_dir().unwrap().join("s0O.db");
     let mut store = LogsStore::load(&db);
-    match CliArgs::parse().cmd {
-        CmdArgs::Log(pl) => store.add(pl.into()),
-        CmdArgs::List(ListArg { project, page }) => {
+    let CliArgs { cmd, project } = CliArgs::parse();
+    match cmd {
+        CmdArgs::New(new) => match new {
+            NewArgs::Log(log) => store.add(ProjectLog::new(project, log.into())),
+            _ => print!("do nothing"),
+        },
+        CmdArgs::List(page) => {
             println!(
                 "{}",
                 store.get(project, &page.into()).data.iter().join("\n")

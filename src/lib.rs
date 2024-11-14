@@ -13,7 +13,6 @@ impl ProjectLog {
         Self { project, content }
     }
 }
-
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct LogsStore {
     store: HashMap<String, Vec<String>>,
