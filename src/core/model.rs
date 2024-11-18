@@ -1,4 +1,7 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[macro_export]
 macro_rules! create_id {
@@ -6,17 +9,10 @@ macro_rules! create_id {
         #[derive(Debug, Clone, Copy)]
         #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
         #[cfg_attr(feature = "sqlx", sqlx(transparent))]
-        pub struct $name(uuid::Uuid);
-
-        #[cfg(feature = "sqlx")]
-        impl From<$name> for u128 {
-            fn from(value: $name) -> Self {
-                value.0.as_u128()
-            }
-        }
+        pub struct $name(sqlx::types::Uuid);
 
         impl $name {
-            pub fn create() -> Self {
+            pub fn new() -> Self {
                 Self(uuid::Uuid::now_v7())
             }
 
@@ -53,11 +49,24 @@ create_id!(EntryId);
 pub struct Version(u16);
 /// hardcoded in lib
 #[derive(Debug)]
-pub struct Revision(u16);
+pub struct Revision; // make static string
 #[derive(Debug)]
 pub struct Date(u64);
 
+impl Date {
+    fn now() -> Self {
+        Self(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64,
+        )
+    }
+}
+
 #[derive(Debug)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(transparent))]
 pub struct Username(String);
 impl Display for Username {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -66,6 +75,7 @@ impl Display for Username {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow))]
 pub struct Author {
     id: UserId,
     name: Username,
@@ -73,7 +83,7 @@ pub struct Author {
 impl Author {
     pub fn create(name: Username) -> Self {
         Self {
-            id: UserId::create(),
+            id: UserId::new(),
             name,
         }
     }
@@ -101,7 +111,19 @@ pub struct Metadata {
 pub struct Log {
     id: EntryId,
     meta: Metadata,
-    content: Text,
+    text: String,
 }
-#[derive(Debug)]
-pub struct Text(String);
+impl Log {
+    pub fn new(text: String, author: UserId) -> Self {
+        Self {
+            id: EntryId::new(),
+            meta: Metadata {
+                revision: Revision,
+                version: Version(0),
+                author,
+                created: Date::now(),
+            },
+            text,
+        }
+    }
+}

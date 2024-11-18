@@ -1,12 +1,13 @@
 use std::str::FromStr;
 
 use anyhow::Context;
-use serde::de::Error;
 use tracing::warn;
 
 use crate::core::{
-    model::{Author, UserId, Username},
-    repo::{AuthorRepository, CreateAuthorError, CreateAuthorRequest},
+    model::{Author, Log, UserId, Username},
+    repo::{
+        AuthorRepository, CreateAuthorError, CreateAuthorRequest, CreateLogRequest, LogRepository,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -33,9 +34,9 @@ impl AuthorRepository for Sqlite {
         request: CreateAuthorRequest,
     ) -> Result<Author, CreateAuthorError> {
         let new_author = Author::create(request.username);
-        let _ = sqlx::query("INSERT INTO AUTHOR (id, name) VALUES ($1,$2)")
+        let _ = sqlx::query("INSERT INTO authors (id,name) VALUES ($1,$2)")
             .bind(new_author.id())
-            .bind(&new_author.name().to_string())
+            .bind(new_author.name().to_string())
             .execute(&self.pool)
             .await
             .map_err(|e| {
@@ -45,15 +46,13 @@ impl AuthorRepository for Sqlite {
         Ok(new_author)
     }
 
-    fn get_author_by_name(
-        &self,
-        username: Username,
-    ) -> impl std::future::Future<Output = Option<Author>> + Send {
-        // let query = sqlx::query("SELECT * FROM AUTHOR WHERE ")
-        //     .execute(&pool)
-        //     .await
-        //     .unwrap();
-        std::future::ready(None)
+    async fn get_author_by_name(&self, username: Username) -> Option<Author> {
+        sqlx::query_as("SELECT (id,name) FROM authors WHERE name = ?")
+            .bind(username)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| warn!("{e}"))
+            .ok()
     }
 
     fn get_author_by_id(
@@ -61,5 +60,21 @@ impl AuthorRepository for Sqlite {
         id: UserId,
     ) -> impl std::future::Future<Output = Option<Author>> + Send {
         std::future::ready(None)
+    }
+}
+
+impl LogRepository for Sqlite {
+    fn create_log(
+        &self,
+        request: CreateLogRequest,
+    ) -> impl std::future::Future<Output = Result<Log, ()>> + Send {
+        std::future::ready(Ok(Log::new("1st log".to_string(), UserId::new())))
+    }
+
+    fn update_log(
+        &self,
+        request: crate::core::repo::UpdateLogRequest,
+    ) -> impl std::future::Future<Output = Result<Log, ()>> + Send {
+        std::future::ready(Err(()))
     }
 }
