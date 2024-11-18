@@ -36,7 +36,7 @@ impl AuthorRepository for Sqlite {
         let new_author = Author::create(request.username);
         let _ = sqlx::query("INSERT INTO authors (id,name) VALUES ($1,$2)")
             .bind(new_author.id())
-            .bind(new_author.name().to_string())
+            .bind(new_author.name())
             .execute(&self.pool)
             .await
             .map_err(|e| {
