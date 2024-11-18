@@ -1,7 +1,20 @@
 use std::{collections::HashMap, path::Path};
 
+mod adapters;
+mod core;
+// make pagination public
+pub use core::pagination::{Page, Paged, Paginable};
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument, warn};
+
+// #[derive(Debug)]
+// pub struct ContentId(u64);
+// #[derive(Debug)]
+// pub struct DocumentId(u64);
+// #[derive(Debug)]
+// pub struct BlockerId(EntryId);
+// #[derive(Debug)]
+// pub struct TaskId(EntryId);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectLog {
@@ -13,23 +26,70 @@ impl ProjectLog {
         Self { project, content }
     }
 }
+// pub struct Task {
+//     id: TaskId,
+//     meta: Metadata,
+//     content: ContentId,
+//     done: bool,
+// }
+// pub struct Blocker {
+//     id: BlockerId,
+//     meta: Metadata,
+//     content: ContentId,
+//     solved: bool,
+// }
+// pub struct Reminder {
+//     id: BlockerId,
+//     meta: Metadata,
+//     content: ContentId,
+//     solved: bool,
+// }
+// pub struct Document {
+//     id: EntryId,
+//     revision: Revision,
+//     meta: Metadata,
+//     document: DocumentId,
+// }
+// pub struct Share {
+//     id: EntryId,
+//     meta: Metadata,
+//     user: UserId,
+//     revoked: bool,
+// }
+// pub struct Unshare {
+//     id: EntryId,
+//     share_id: EntryId,
+//     meta: Metadata,
+// }
+// pub enum Condition {
+//     Date(u64),
+//     Completion(TaskId),
+//     Solved(BlockerId),
+//     // Every(...
+// }
+// pub struct Trigger {
+//     on: Condition,
+//     desc: String,
+//     /// maximum number of times to trigger
+//     times: u32,
+//     action: (), // todo
+// }
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct LogsStore {
     store: HashMap<String, Vec<String>>,
 }
+pub type StoreResult<T> = Result<T, ()>;
 impl LogsStore {
     pub fn load<P: AsRef<Path>>(path: P) -> Self {
         let path = path.as_ref();
         if !path.exists() {
             return LogsStore::default();
         }
-
         let db = std::fs::File::options()
             .truncate(false)
             .read(true)
             .open(path)
             .unwrap();
-
         let store = serde_json::from_reader(db)
             .map_err(|e| warn!("{e}"))
             .unwrap_or_default();
@@ -63,72 +123,23 @@ impl LogsStore {
             self.store.insert(project, vec![content]);
         }
     }
+    // #[instrument(level = "info")]
+    // pub fn log(&mut self, project: ProjectId, log: Text) {
+    //     if let Some(list) = self.store.get_mut(&project) {
+    //         list.push(content);
+    //     } else {
+    //         self.store.insert(project, vec![content]);
+    //     }
+    // }
+    // pub fn upd(&mut self, log: Log);
+    // pub fn share(&mit self, log: LogId, user: UserId) -> StoreResult<()> {
+    // }
     #[instrument(level = "info")]
     pub fn get(&self, project: String, page: &Page) -> Paged<String> {
+        use core::pagination::Paginable;
         self.store
             .get(&project)
-            .map(|list| list.get(page))
+            .map(|list| list.get_page(page))
             .unwrap_or_default()
-    }
-}
-#[derive(Debug, Clone)]
-pub struct Page {
-    page: usize,
-    size: usize,
-}
-impl Default for Page {
-    fn default() -> Self {
-        Self { page: 1, size: 10 }
-    }
-}
-impl Page {
-    pub fn new(page: usize, size: usize) -> Self {
-        Self { page, size }
-    }
-    pub fn number(&self) -> usize {
-        self.page
-    }
-}
-#[derive(Serialize)]
-pub struct Paged<T> {
-    pub page: usize,
-    pub data: Vec<T>,
-}
-impl<T> Default for Paged<T> {
-    fn default() -> Self {
-        Paged {
-            page: 1,
-            data: vec![],
-        }
-    }
-}
-pub trait Paginable {
-    type Output;
-    fn get(&self, page: &Page) -> Paged<Self::Output>;
-}
-impl<T> Paginable for Vec<T>
-where
-    T: Clone,
-{
-    type Output = T;
-    fn get(&self, page: &Page) -> Paged<Self::Output> {
-        let Page { page, size } = page;
-        if self.len() < *size {
-            return Paged {
-                page: 1,
-                data: self.to_vec(),
-            };
-        }
-        let pages_count = (self.len() / size) + 1;
-        let page = if *page > pages_count {
-            pages_count
-        } else {
-            *page
-        };
-        let offset = (page - 1) * size;
-        Paged {
-            page,
-            data: self[offset..(offset + size)].to_vec(),
-        }
     }
 }
