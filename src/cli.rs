@@ -59,11 +59,21 @@ impl From<PageArg> for Page {
     }
 }
 fn main() {
+    // load config
+
+    // set loging
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
         .init();
+
+    // setup db
     let db = home::home_dir().unwrap().join("s0O.db");
     let mut store = LogsStore::load(&db);
+
+    // set remote logs
+
+    // load service and inject store
+
     let CliArgs { cmd, project } = CliArgs::parse();
     match cmd {
         CmdArgs::New(new) => match new {
