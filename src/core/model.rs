@@ -75,7 +75,7 @@ impl Display for Username {
 }
 
 #[derive(Debug)]
-#[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow))]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow, sqlx::Encode))]
 pub struct Author {
     id: UserId,
     name: Username,
