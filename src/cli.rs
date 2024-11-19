@@ -14,6 +14,8 @@ pub struct CliArgs {
     cmd: CmdArgs,
     #[clap(short, long, default_value = "default")]
     project: String,
+    #[clap(short, long)]
+    author: String,
 }
 #[derive(Debug, clap::Subcommand)]
 pub enum CmdArgs {
@@ -74,7 +76,11 @@ fn main() {
 
     // load service and inject store
 
-    let CliArgs { cmd, project } = CliArgs::parse();
+    let CliArgs {
+        cmd,
+        project,
+        author,
+    } = CliArgs::parse();
     match cmd {
         CmdArgs::New(new) => match new {
             NewArgs::Log(log) => store.add(ProjectLog::new(project, log.into())),

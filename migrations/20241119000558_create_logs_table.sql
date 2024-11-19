@@ -1,15 +1,23 @@
--- Add migration script here
-
-CREATE TABLE IF NOT EXISTS projects (
+-- sqlx database drop/ccreate
+-- sqlx migrate run
+CREATE TABLE IF NOT EXISTS author (
   id uuid primary key,
   name text,
-  created integer
 );
-
-CREATE TABLE IF NOT EXISTS logs (
+CREATE TABLE IF NOT EXISTS project (
   id uuid primary key,
-  project_id uuid,
-  author_id uuid,
+  author uuid references author,
+  created integer,
+  version integer, -- update version of this entry
+  revision integer, -- code revision when updated
+  name text,
+);
+CREATE TABLE IF NOT EXISTS log (
+  id uuid primary key,
+  project uuid references project,
+  author uuid references author,
+  version integer, -- update version of this entry
+  revision integer, -- code revision when updated
   created integer,
   text text
 );

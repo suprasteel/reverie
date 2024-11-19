@@ -7,12 +7,21 @@ pub struct Page {
 
 impl Page {
     pub fn new(page: usize, size: usize) -> Self {
+        assert!(page > 0);
+        assert!(size >= 1);
         Self { page, size }
     }
-    pub fn last(size: usize) -> Self {
-        Self { page: 0, size }
-    }
     pub fn number(&self) -> usize {
+        self.page
+    }
+    pub fn offset(&self) -> usize {
+        if self.page == 0 {
+            0
+        } else {
+            (self.page - 1) * self.size
+        }
+    }
+    pub fn page_size(&self) -> usize {
         self.page
     }
 }
@@ -42,8 +51,10 @@ impl<T> Default for Paged<T> {
 /// A trait for model providing pages
 pub trait Paginable {
     type Output;
-    /// Returns the sub set of data corresponding to the page requested
+    /// Returns the **subset** of data corresponding to the page requested
     fn get_page(&self, page: &Page) -> Paged<Self::Output>;
+    /// Returns list with the page info (does not limit shorten the list)
+    fn to_paged(self, page: Page) -> Paged<Self::Output>;
 }
 
 // defualt vec impl
@@ -70,6 +81,13 @@ where
         Paged {
             page,
             data: self[offset..(offset + size)].to_vec(),
+        }
+    }
+    fn to_paged(self, page: Page) -> Paged<Self::Output> {
+        assert!(page.page_size() >= self.len());
+        Paged {
+            page: page.number(),
+            data: self,
         }
     }
 }

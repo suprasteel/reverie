@@ -45,12 +45,15 @@ create_id!(UserId);
 create_id!(ProjectId);
 create_id!(EntryId);
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(transparent))]
 pub struct Version(u16);
 /// hardcoded in lib
-#[derive(Debug)]
-pub struct Revision; // make static string
+pub type Revision = i16; // make static string
 #[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(transparent))]
 pub struct Date(i64);
 impl Date {
     pub fn now() -> Self {
@@ -71,7 +74,7 @@ impl Date {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(feature = "sqlx", sqlx(transparent))]
 pub struct Username(String);
@@ -81,13 +84,13 @@ impl Display for Username {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow, sqlx::Encode))]
-pub struct Author {
+pub struct User {
     id: UserId,
-    name: Username,
+    pub(crate) name: Username,
 }
-impl Author {
+impl User {
     pub fn create(name: Username) -> Self {
         Self {
             id: UserId::new(),
@@ -97,48 +100,65 @@ impl Author {
     pub fn id(&self) -> UserId {
         self.id
     }
-    pub fn name(&self) -> &Username {
-        &self.name
-    }
 }
 #[derive(Debug)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow, sqlx::Encode))]
 pub struct Project {
     id: ProjectId,
-    mata: Metadata,
+    #[sqlx(flatten)]
+    pub(crate) meta: Metadata,
+    pub(crate) name: String,
+}
+impl Project {
+    pub fn new(name: String, author: UserId) -> Self {
+        Self {
+            id: ProjectId::new(),
+            meta: Metadata {
+                revision: 0,
+                version: Version(0),
+                author,
+                created: Date::now(),
+            },
+            name,
+        }
+    }
+    pub fn id(&self) -> ProjectId {
+        self.id
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow))]
 pub struct Metadata {
-    revision: Revision,
-    version: Version,
-    author: UserId,
-    created: Date,
+    pub(crate) revision: Revision,
+    pub(crate) version: Version,
+    pub(crate) author: UserId,
+    pub(crate) created: Date,
 }
 impl Metadata {
     pub fn new(user: UserId) -> Self {
         Self {
-            revision: Revision,
+            revision: 0,
             version: Version(0),
             author: user,
             created: Date::now(),
         }
     }
-    pub fn created(&self) -> &Date {
-        &self.created
-    }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow))]
 pub struct Log {
     id: EntryId,
-    meta: Metadata,
-    text: String,
+    #[sqlx(flatten)]
+    pub(crate) meta: Metadata,
+    pub(crate) text: String,
 }
 impl Log {
     pub fn new(text: String, author: UserId) -> Self {
         Self {
             id: EntryId::new(),
             meta: Metadata {
-                revision: Revision,
+                revision: 0,
                 version: Version(0),
                 author,
                 created: Date::now(),
@@ -148,11 +168,5 @@ impl Log {
     }
     pub fn id(&self) -> EntryId {
         self.id
-    }
-    pub fn text(&self) -> &str {
-        &self.text
-    }
-    pub fn metadata(&self) -> &Metadata {
-        &self.meta
     }
 }
