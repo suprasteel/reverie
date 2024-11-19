@@ -1,6 +1,8 @@
-use back::{LogsStore, Page, ProjectLog};
+use back::{
+    CreateAuthorRequest, CreateLogRequest, CreateProjectRequest, LocalLogStoreService, LogService,
+    Page, ProjectLog, SqliteRepo, Username,
+};
 use clap::{Args, Parser};
-use itertools::Itertools;
 // /// Six0One 601 > log
 // #[derive(Debug, Parser)]
 // #[command(name = "Six0One")]
@@ -14,23 +16,33 @@ pub struct CliArgs {
     cmd: CmdArgs,
     #[clap(short, long, default_value = "default")]
     project: String,
-    #[clap(short, long)]
-    author: String,
+    #[clap(short, long, default_value = "me")]
+    author: Username,
+    #[clap(flatten)]
+    page: PageArg,
 }
 #[derive(Debug, clap::Subcommand)]
 pub enum CmdArgs {
     #[clap(subcommand)]
     New(NewArgs),
-    List(PageArg),
+    #[clap(subcommand)]
+    List(ListArgs),
 }
 #[derive(Debug, clap::Subcommand)]
 pub enum NewArgs {
     Log(LogArg),
-    Other(LogArg),
+    User,
+    Project,
+}
+#[derive(Debug, clap::Subcommand)]
+pub enum ListArgs {
+    Log,
+    User,
+    Project,
 }
 #[derive(Debug, Args, Clone)]
 pub struct LogArg {
-    #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
+    #[clap(trailing_var_arg = true, allow_hyphen_values = false)]
     value: Vec<String>,
 }
 impl From<LogArg> for String {
@@ -45,9 +57,9 @@ pub struct ProjectLogArg {
 }
 #[derive(Debug, Args, Clone)]
 pub struct PageArg {
-    #[clap(short, long, default_value = "1")]
+    #[clap(long, default_value = "1")]
     page: usize,
-    #[clap(short, long, default_value = "5")]
+    #[clap(long, default_value = "100")]
     size: usize,
 }
 impl From<ProjectLogArg> for ProjectLog {
@@ -60,7 +72,8 @@ impl From<PageArg> for Page {
         Self::new(page, size)
     }
 }
-fn main() {
+#[tokio::main]
+async fn main() {
     // load config
 
     // set loging
@@ -70,30 +83,104 @@ fn main() {
 
     // setup db
     let db = home::home_dir().unwrap().join("s0O.db");
-    let mut store = LogsStore::load(&db);
-
+    // let mut store = LogsStore::load(&db);
     // set remote logs
-
     // load service and inject store
+    let repo = SqliteRepo::new(db.to_str().unwrap()).await.unwrap();
+    let service = LogService::new(repo);
 
     let CliArgs {
         cmd,
         project,
         author,
+        page,
     } = CliArgs::parse();
+
     match cmd {
         CmdArgs::New(new) => match new {
-            NewArgs::Log(log) => store.add(ProjectLog::new(project, log.into())),
-            _ => print!("do nothing"),
+            NewArgs::Log(log) => {
+                let project = service.project(&project).await;
+                if project.is_none() {
+                    return println!("project not found");
+                }
+                let author = service.user(&author).await;
+                if author.is_none() {
+                    return println!("author not found");
+                }
+                match service
+                    .add_log(CreateLogRequest {
+                        author: author.unwrap().id(),
+                        project: project.unwrap().id(),
+                        text: log.into(),
+                    })
+                    .await
+                {
+                    Ok(log) => println!("{log:?}"),
+                    Err(()) => println!("failed to add log"),
+                }
+            }
+            NewArgs::User => {
+                match service
+                    .new_user(CreateAuthorRequest {
+                        username: author.to_owned(),
+                    })
+                    .await
+                {
+                    Ok(user) => println!("user {user:?} created"),
+                    Err(_) => println!("Could not create user"),
+                }
+            }
+            NewArgs::Project => {
+                let author = match service.user(&author).await {
+                    None => return println!("author not found"),
+                    Some(author) => author,
+                };
+                match service
+                    .create_project(CreateProjectRequest {
+                        author: author.id(),
+                        project_name: project,
+                    })
+                    .await
+                    .ok()
+                {
+                    Some(project) => {
+                        println!("created project {} ({})", project.name(), project.id());
+                    }
+                    _ => {
+                        println!("failed");
+                    }
+                }
+            }
         },
-        CmdArgs::List(page) => {
-            println!(
-                "{}",
-                store.get(project, &page.into()).data.iter().join("\n")
-            )
+        CmdArgs::List(list_arg) => {
+            let project = match service.project(&project).await {
+                None => return println!("project not found"),
+                Some(p) => p,
+            };
+            match list_arg {
+                ListArgs::Log => println!(
+                    "{}",
+                    service
+                        .logs(project.id(), page.into())
+                        .await
+                        .map(|l| format!("{:?}", l))
+                        .unwrap()
+                ),
+                ListArgs::User => {
+                    println!(
+                        "{:?}",
+                        service
+                            .user(&author)
+                            .await
+                            .map(|u| format!("{:?}", u))
+                            .unwrap_or("no user".into())
+                    );
+                }
+                ListArgs::Project => println!("{:?}", project),
+            }
         }
     }
-    store.save(&db);
+    // store.save(&db);
 }
 
 // we have projects

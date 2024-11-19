@@ -1,3 +1,5 @@
 pub mod axum;
 pub mod envconf;
-pub mod sqlite;
+mod sqlite;
+
+pub use sqlite::Sqlite as SqliteRepo;

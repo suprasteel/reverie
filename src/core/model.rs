@@ -1,5 +1,6 @@
 use std::{
     fmt::Display,
+    str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -11,11 +12,18 @@ macro_rules! create_id {
         #[cfg_attr(feature = "sqlx", sqlx(transparent))]
         pub struct $name(sqlx::types::Uuid);
 
-        impl $name {
-            pub fn new() -> Self {
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0.to_string())
+            }
+        }
+
+        impl Default for $name {
+            fn default() -> Self {
                 Self(uuid::Uuid::now_v7())
             }
-
+        }
+        impl $name {
             pub fn timestamp(&self) -> uuid::Timestamp {
                 // should be enforced at build time
                 assert!(self.0.get_version_num() == 7);
@@ -68,7 +76,7 @@ impl Date {
         self.0
     }
 
-    fn iso8601(&self) -> String {
+    fn _iso8601(&self) -> String {
         // https://stackoverflow.com/questions/64146345/how-do-i-convert-a-systemtime-to-iso-8601-in-rust
         todo!()
     }
@@ -78,6 +86,20 @@ impl Date {
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(feature = "sqlx", sqlx(transparent))]
 pub struct Username(String);
+impl FromStr for Username {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "me" {
+            return Ok(Self("me".to_string()));
+        }
+        let chars_count = s.chars().count();
+        if 6 < chars_count && chars_count < 24 {
+            Ok(Self(s.to_string()))
+        } else {
+            Err("6 < project name < 24")
+        }
+    }
+}
 impl Display for Username {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -93,12 +115,15 @@ pub struct User {
 impl User {
     pub fn create(name: Username) -> Self {
         Self {
-            id: UserId::new(),
+            id: UserId::default(),
             name,
         }
     }
     pub fn id(&self) -> UserId {
         self.id
+    }
+    pub fn name(&self) -> &Username {
+        &self.name
     }
 }
 #[derive(Debug)]
@@ -112,7 +137,7 @@ pub struct Project {
 impl Project {
     pub fn new(name: String, author: UserId) -> Self {
         Self {
-            id: ProjectId::new(),
+            id: ProjectId::default(),
             meta: Metadata {
                 revision: 0,
                 version: Version(0),
@@ -124,6 +149,9 @@ impl Project {
     }
     pub fn id(&self) -> ProjectId {
         self.id
+    }
+    pub fn name(&self) -> &str {
+        self.name.as_str()
     }
 }
 
@@ -156,7 +184,7 @@ pub struct Log {
 impl Log {
     pub fn new(text: String, author: UserId) -> Self {
         Self {
-            id: EntryId::new(),
+            id: EntryId::default(),
             meta: Metadata {
                 revision: 0,
                 version: Version(0),

@@ -3,7 +3,12 @@ use std::{collections::HashMap, path::Path};
 mod adapters;
 mod core;
 // make pagination public
+pub use adapters::SqliteRepo;
+pub use core::model::Project;
+pub use core::model::Username;
 pub use core::pagination::{Page, Paged, Paginable};
+pub use core::repo::{CreateAuthorRequest, CreateLogRequest, CreateProjectRequest};
+pub use core::service::{LocalLogStoreService, LogService};
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument, warn};
 

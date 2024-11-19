@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 #[cfg_attr(feature = "dtos", derive(serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct Page {
@@ -33,18 +35,31 @@ impl Default for Page {
 }
 
 /// Paged data response
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "dtos", derive(serde::Serialize))]
 pub struct Paged<T> {
     pub page: usize,
     pub data: Vec<T>,
 }
-
 impl<T> Default for Paged<T> {
     fn default() -> Self {
         Paged {
             page: 1,
             data: vec![],
         }
+    }
+}
+impl<T> std::fmt::Display for Paged<T>
+where
+    T: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            " * Page {:02} *\n\n{:?}",
+            self.page,
+            self.data.iter().join("\n")
+        )
     }
 }
 

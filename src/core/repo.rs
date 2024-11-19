@@ -2,31 +2,21 @@ use std::future::Future;
 
 use crate::{Page, Paged};
 
-use super::model::{EntryId, Log, Project, ProjectId, User, UserId, Username};
+use super::model::{Log, Project, ProjectId, User, UserId, Username};
 
 pub struct CreateAuthorRequest {
     pub username: Username,
 }
-
 pub struct CreateAuthorError;
 pub struct CreateLogError;
-
 pub struct CreateProjectRequest {
     pub author: UserId,
     pub project_name: String,
 }
-
 pub struct CreateLogRequest {
     pub author: UserId,
     pub project: ProjectId,
     pub text: String,
-}
-
-pub struct UpdateLogRequest {
-    log: EntryId,
-    author: UserId,
-    project: ProjectId,
-    text: String,
 }
 
 pub trait AuthorRepository: Clone + Send + Sync + 'static {
