@@ -7,6 +7,7 @@ pub struct CreateAuthorRequest {
 }
 
 pub struct CreateAuthorError;
+pub struct CreateLogError;
 
 pub struct CreateProjectRequest {
     author: UserId,
@@ -14,9 +15,9 @@ pub struct CreateProjectRequest {
 }
 
 pub struct CreateLogRequest {
-    author: UserId,
-    project: ProjectId,
-    text: String,
+    pub author: UserId,
+    pub project: ProjectId,
+    pub text: String,
 }
 
 pub struct UpdateLogRequest {
@@ -46,8 +47,10 @@ pub trait ProjectRepository: Clone + Send + Sync + 'static {
 }
 
 pub trait LogRepository: Clone + Send + Sync + 'static {
-    fn create_log(&self, request: CreateLogRequest)
-        -> impl Future<Output = Result<Log, ()>> + Send;
+    fn create_log(
+        &self,
+        request: CreateLogRequest,
+    ) -> impl Future<Output = Result<Log, CreateLogError>> + Send;
     fn update_log(&self, request: UpdateLogRequest)
         -> impl Future<Output = Result<Log, ()>> + Send;
 }

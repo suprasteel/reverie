@@ -50,17 +50,24 @@ pub struct Version(u16);
 /// hardcoded in lib
 #[derive(Debug)]
 pub struct Revision; // make static string
-#[derive(Debug)]
-pub struct Date(u64);
-
+#[derive(Debug, Copy, Clone)]
+pub struct Date(i64);
 impl Date {
-    fn now() -> Self {
+    pub fn now() -> Self {
         Self(
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_nanos() as u64,
+                .as_nanos() as i64,
         )
+    }
+    pub fn as_i64(&self) -> i64 {
+        self.0
+    }
+
+    fn iso8601(&self) -> String {
+        // https://stackoverflow.com/questions/64146345/how-do-i-convert-a-systemtime-to-iso-8601-in-rust
+        todo!()
     }
 }
 
@@ -107,6 +114,19 @@ pub struct Metadata {
     author: UserId,
     created: Date,
 }
+impl Metadata {
+    pub fn new(user: UserId) -> Self {
+        Self {
+            revision: Revision,
+            version: Version(0),
+            author: user,
+            created: Date::now(),
+        }
+    }
+    pub fn created(&self) -> &Date {
+        &self.created
+    }
+}
 #[derive(Debug)]
 pub struct Log {
     id: EntryId,
@@ -125,5 +145,14 @@ impl Log {
             },
             text,
         }
+    }
+    pub fn id(&self) -> EntryId {
+        self.id
+    }
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+    pub fn metadata(&self) -> &Metadata {
+        &self.meta
     }
 }

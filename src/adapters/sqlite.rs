@@ -6,7 +6,8 @@ use tracing::warn;
 use crate::core::{
     model::{Author, Log, UserId, Username},
     repo::{
-        AuthorRepository, CreateAuthorError, CreateAuthorRequest, CreateLogRequest, LogRepository,
+        AuthorRepository, CreateAuthorError, CreateAuthorRequest, CreateLogError, CreateLogRequest,
+        LogRepository,
     },
 };
 
@@ -64,11 +65,36 @@ impl AuthorRepository for Sqlite {
 }
 
 impl LogRepository for Sqlite {
-    fn create_log(
-        &self,
-        request: CreateLogRequest,
-    ) -> impl std::future::Future<Output = Result<Log, ()>> + Send {
-        std::future::ready(Ok(Log::new("1st log".to_string(), UserId::new())))
+    async fn create_log(&self, request: CreateLogRequest) -> Result<Log, CreateLogError> {
+        let mut tx = self.pool.begin().await.map_err(|e| {
+            warn!("{e}");
+            CreateLogError
+        })?;
+        let CreateLogRequest {
+            author,
+            project,
+            text,
+        } = request;
+        let log = Log::new(text, author);
+        let _ = sqlx::query(
+            "INSERT INTO logs (id,project_id,author_id,created,text) VALUES ($1,$2,$3,$4,$5)",
+        )
+        .bind(log.id())
+        .bind(project)
+        .bind(author)
+        .bind(log.metadata().created().as_i64())
+        .bind(log.text())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            warn!("{e}");
+            CreateLogError
+        })?;
+        tx.commit().await.map_err(|e| {
+            warn!("{e}");
+            CreateLogError
+        })?;
+        Ok(log)
     }
 
     fn update_log(
