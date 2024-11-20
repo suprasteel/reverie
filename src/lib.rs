@@ -3,8 +3,13 @@ use std::{collections::HashMap, path::Path};
 mod adapters;
 mod core;
 // make pagination public
+pub use adapters::Config;
+pub use adapters::Database;
 pub use adapters::SqliteRepo;
 pub use core::model::Project;
+pub use core::model::ProjectId;
+pub use core::model::ProjectName;
+pub use core::model::UserId;
 pub use core::model::Username;
 pub use core::pagination::{Page, Paged, Paginable};
 pub use core::repo::{CreateAuthorRequest, CreateLogRequest, CreateProjectRequest};

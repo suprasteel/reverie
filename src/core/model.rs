@@ -1,8 +1,9 @@
 use std::{
-    fmt::Display,
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+use derive_more::derive::{Display, Error};
 
 #[macro_export]
 macro_rules! create_id {
@@ -42,9 +43,18 @@ macro_rules! create_id {
                 }
             }
         }
+        impl FromStr for $name {
+            type Err = ModelError;
+            fn from_str(input: &str) -> Result<Self, Self::Err> {
+                uuid::Uuid::parse_str(input)
+                    .map(Self)
+                    .or(Err(ModelError::InvalidId))
+            }
+        }
     };
 }
 
+#[derive(Debug, Display, Clone, Copy, Error)]
 pub enum ModelError {
     InvalidId,
 }
@@ -82,31 +92,63 @@ impl Date {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Display, Error)]
+#[display("invalid username {} (reason: {})", 0, 1)]
+pub struct InvalidUsername(pub String, pub &'static str);
+// impl std::error::Error for InvalidUsername {}
+impl From<(&str, &'static str)> for InvalidUsername {
+    fn from((username, reason): (&str, &'static str)) -> Self {
+        Self(username.to_string(), reason)
+    }
+}
+#[derive(Debug, Clone, Display)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(feature = "sqlx", sqlx(transparent))]
 pub struct Username(String);
 impl FromStr for Username {
-    type Err = &'static str;
+    type Err = InvalidUsername;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s == "me" {
             return Ok(Self("me".to_string()));
         }
         let chars_count = s.chars().count();
-        if 6 < chars_count && chars_count < 24 {
-            Ok(Self(s.to_string()))
+        if chars_count < 6 {
+            Err((s, "too short").into())
+        } else if 24 < chars_count {
+            Err((s, "too long").into())
         } else {
-            Err("6 < project name < 24")
+            Ok(Self(s.to_string()))
         }
     }
 }
-impl Display for Username {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+#[derive(Debug, Display)]
+#[display("invalid project name {} (reason: {})", 0, 1)]
+pub struct InvalidProjectName(pub String, pub &'static str);
+impl std::error::Error for InvalidProjectName {}
+impl From<(&str, &'static str)> for InvalidProjectName {
+    fn from((project_name, reason): (&str, &'static str)) -> Self {
+        Self(project_name.to_string(), reason)
     }
 }
-
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(transparent))]
+#[derive(Debug, Display, Clone)]
+pub struct ProjectName(String);
+impl FromStr for ProjectName {
+    type Err = InvalidProjectName;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let chars_count = s.chars().count();
+        if chars_count < 3 {
+            Err((s, "too short").into())
+        } else if 64 < chars_count {
+            Err((s, "too long").into())
+        } else {
+            Ok(Self(s.to_string()))
+        }
+    }
+}
+#[derive(Debug, Clone, Display)]
+#[display("#{id}-{name}")]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow, sqlx::Encode))]
 pub struct User {
     id: UserId,
@@ -126,16 +168,17 @@ impl User {
         &self.name
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Display)]
+#[display("Project #{id} - {name} ({})", meta.author)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow, sqlx::Encode))]
 pub struct Project {
     id: ProjectId,
     #[sqlx(flatten)]
     pub(crate) meta: Metadata,
-    pub(crate) name: String,
+    pub(crate) name: ProjectName,
 }
 impl Project {
-    pub fn new(name: String, author: UserId) -> Self {
+    pub fn new(name: ProjectName, author: UserId) -> Self {
         Self {
             id: ProjectId::default(),
             meta: Metadata {
@@ -150,8 +193,8 @@ impl Project {
     pub fn id(&self) -> ProjectId {
         self.id
     }
-    pub fn name(&self) -> &str {
-        self.name.as_str()
+    pub fn name(&self) -> &ProjectName {
+        &self.name
     }
 }
 
@@ -173,7 +216,8 @@ impl Metadata {
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display("#{id} - by {} - {text}\n", meta.author)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow))]
 pub struct Log {
     id: EntryId,

@@ -5,7 +5,7 @@ use axum::{
     Json, Router,
 };
 use axum_macros::debug_handler;
-use back::{LogsStore, Page, Paged, ProjectLog};
+use reverie::{LogsStore, Page, Paged, ProjectLog};
 use serde::Deserialize;
 use std::{
     net::SocketAddr,

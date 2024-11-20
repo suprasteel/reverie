@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Config launch.json 1",
+      "program": "${workspaceRoot}/target/debug/${workspaceRootFolderName}",
+      "args": [],
+      "cwd": "${workspaceRoot}",
+      "sourceLanguages": [
+        "rust"
+      ]
+    },
+    {
+      "type": "codelldb",
+      "request": "launch",
+      "name": "Config launch.json 2",
+      "program": "${workspaceRoot}/target/debug/${workspaceRootFolderName}",
+      "args": [
+        "new",
+        "log",
+        "test"
+      ],
+      "cwd": "${workspaceRoot}",
+    }
+  ]
+}

@@ -1,8 +1,10 @@
-use back::{
-    CreateAuthorRequest, CreateLogRequest, CreateProjectRequest, LocalLogStoreService, LogService,
-    Page, ProjectLog, SqliteRepo, Username,
-};
 use clap::{Args, Parser};
+use derive_more::derive::Display;
+use itertools::Itertools;
+use reverie::{
+    LocalLogStoreService, LogService, Page, ProjectId, ProjectLog, ProjectName, SqliteRepo, UserId,
+    Username,
+};
 // /// Six0One 601 > log
 // #[derive(Debug, Parser)]
 // #[command(name = "Six0One")]
@@ -14,12 +16,12 @@ use clap::{Args, Parser};
 pub struct CliArgs {
     #[clap(subcommand)]
     cmd: CmdArgs,
-    #[clap(short, long, default_value = "default")]
-    project: String,
-    #[clap(short, long, default_value = "me")]
-    author: Username,
-    #[clap(flatten)]
-    page: PageArg,
+    // #[clap(short, long, default_value = "default")]
+    // project: String,
+    // #[clap(short, long, default_value = "me")]
+    // author: String,
+    // #[clap(flatten)]
+    // page: PageArg,
 }
 #[derive(Debug, clap::Subcommand)]
 pub enum CmdArgs {
@@ -30,25 +32,48 @@ pub enum CmdArgs {
 }
 #[derive(Debug, clap::Subcommand)]
 pub enum NewArgs {
-    Log(LogArg),
-    User,
-    Project,
+    Log(NewLogArgs),
+    User(NewUserArgs),
+    Project(NewProjectArgs),
+}
+#[derive(Debug, Args, Clone)]
+pub struct NewLogArgs {
+    #[clap(short, long)]
+    author: UserId,
+    #[clap(short, long)]
+    project: ProjectId,
+    #[clap(trailing_var_arg = true, allow_hyphen_values = false)]
+    text: String,
+}
+#[derive(Debug, Args, Clone)]
+pub struct NewUserArgs {
+    username: Username,
+}
+#[derive(Debug, Args, Clone)]
+pub struct NewProjectArgs {
+    owner: UserId,
+    name: ProjectName,
 }
 #[derive(Debug, clap::Subcommand)]
 pub enum ListArgs {
-    Log,
-    User,
-    Project,
+    Logs(ListLogsArgs),
+    Projects(ListProjectsArgs),
 }
 #[derive(Debug, Args, Clone)]
+pub struct ListLogsArgs {
+    project: ProjectId,
+    #[clap(flatten)]
+    pagination: PageArgs,
+}
+#[derive(Debug, Args, Clone)]
+pub struct ListProjectsArgs {
+    user: UserId,
+}
+#[derive(Debug, Args, Clone, Display)]
+#[display("{}", value.iter().join(" "))]
 pub struct LogArg {
     #[clap(trailing_var_arg = true, allow_hyphen_values = false)]
     value: Vec<String>,
-}
-impl From<LogArg> for String {
-    fn from(LogArg { value }: LogArg) -> Self {
-        value.join(" ").to_string()
-    }
 }
 #[derive(Debug, Parser)]
 pub struct ProjectLogArg {
@@ -56,7 +81,7 @@ pub struct ProjectLogArg {
     content: String,
 }
 #[derive(Debug, Args, Clone)]
-pub struct PageArg {
+pub struct PageArgs {
     #[clap(long, default_value = "1")]
     page: usize,
     #[clap(long, default_value = "100")]
@@ -67,118 +92,64 @@ impl From<ProjectLogArg> for ProjectLog {
         Self::new(project, content)
     }
 }
-impl From<PageArg> for Page {
-    fn from(PageArg { page, size }: PageArg) -> Self {
+impl From<PageArgs> for Page {
+    fn from(PageArgs { page, size }: PageArgs) -> Self {
         Self::new(page, size)
     }
 }
 #[tokio::main]
 async fn main() {
     // load config
+    // let config = Config::default();
 
     // set loging
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
         .init();
 
-    // setup db
-    let db = home::home_dir().unwrap().join("s0O.db");
-    // let mut store = LogsStore::load(&db);
-    // set remote logs
-    // load service and inject store
-    let repo = SqliteRepo::new(db.to_str().unwrap()).await.unwrap();
+    let repo = SqliteRepo::new("/tmp/db.sqlite").await.unwrap();
     let service = LogService::new(repo);
 
     let CliArgs {
         cmd,
-        project,
-        author,
-        page,
+        // project,
+        // author,
+        // page,
     } = CliArgs::parse();
 
     match cmd {
         CmdArgs::New(new) => match new {
-            NewArgs::Log(log) => {
-                let project = service.project(&project).await;
-                if project.is_none() {
-                    return println!("project not found");
-                }
-                let author = service.user(&author).await;
-                if author.is_none() {
-                    return println!("author not found");
-                }
-                match service
-                    .add_log(CreateLogRequest {
-                        author: author.unwrap().id(),
-                        project: project.unwrap().id(),
-                        text: log.into(),
-                    })
-                    .await
-                {
-                    Ok(log) => println!("{log:?}"),
-                    Err(()) => println!("failed to add log"),
-                }
-            }
-            NewArgs::User => {
-                match service
-                    .new_user(CreateAuthorRequest {
-                        username: author.to_owned(),
-                    })
-                    .await
-                {
-                    Ok(user) => println!("user {user:?} created"),
-                    Err(_) => println!("Could not create user"),
-                }
-            }
-            NewArgs::Project => {
-                let author = match service.user(&author).await {
-                    None => return println!("author not found"),
-                    Some(author) => author,
-                };
-                match service
-                    .create_project(CreateProjectRequest {
-                        author: author.id(),
-                        project_name: project,
-                    })
-                    .await
-                    .ok()
-                {
-                    Some(project) => {
-                        println!("created project {} ({})", project.name(), project.id());
-                    }
-                    _ => {
-                        println!("failed");
-                    }
+            NewArgs::Log(NewLogArgs {
+                author,
+                project,
+                text,
+            }) => match service.add_log(author, project, text).await {
+                Ok(log) => println!("{log:?}"),
+                Err(e) => println!("{e}"),
+            },
+            NewArgs::User(NewUserArgs { username }) => match service.new_user(username).await {
+                Ok(user) => println!("created {user}"),
+                Err(_) => println!("Could not create user"),
+            },
+            NewArgs::Project(NewProjectArgs { owner, name }) => {
+                match service.new_project(name, owner).await {
+                    Ok(project) => println!("created {project}"),
+                    Err(e) => print!("{e}"),
                 }
             }
         },
-        CmdArgs::List(list_arg) => {
-            let project = match service.project(&project).await {
-                None => return println!("project not found"),
-                Some(p) => p,
-            };
-            match list_arg {
-                ListArgs::Log => println!(
-                    "{}",
-                    service
-                        .logs(project.id(), page.into())
-                        .await
-                        .map(|l| format!("{:?}", l))
-                        .unwrap()
-                ),
-                ListArgs::User => {
-                    println!(
-                        "{:?}",
-                        service
-                            .user(&author)
-                            .await
-                            .map(|u| format!("{:?}", u))
-                            .unwrap_or("no user".into())
-                    );
-                }
-                ListArgs::Project => println!("{:?}", project),
+        CmdArgs::List(list) => match list {
+            ListArgs::Logs(ListLogsArgs {
+                project,
+                pagination,
+            }) => match service.logs(project, pagination.into()).await {
+                Ok(logs) => println!("{logs}"),
+                Err(e) => print!("{e}"),
+            },
+            ListArgs::Projects(ListProjectsArgs { user }) => {
+                println!("{:?}", service.projects_of(user).await);
             }
-        }
+        },
     }
     // store.save(&db);
 }

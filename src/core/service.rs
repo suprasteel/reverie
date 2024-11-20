@@ -13,15 +13,16 @@
 
 use std::future::Future;
 
-use tracing::warn;
-
 use crate::{Page, Paged};
 
 use super::{
-    model::{Log, Project, ProjectId, User, Username},
+    model::{
+        InvalidProjectName, InvalidUsername, Log, Project, ProjectId, ProjectName, User, UserId,
+        Username,
+    },
     repo::{
-        AuthorRepository, CreateAuthorRequest, CreateLogRequest, CreateProjectRequest,
-        LogRepository, ProjectRepository,
+        AuthorRepository, CreateAuthorError, CreateAuthorRequest, CreateLogError, CreateLogRequest,
+        CreateProjectError, CreateProjectRequest, LogRepository, ProjectRepository, RepoQueryError,
     },
 };
 
@@ -31,7 +32,6 @@ where
     R: AuthorRepository + ProjectRepository + LogRepository,
 {
     repo: R,
-    local_user: Option<User>,
 }
 
 impl<R> LogService<R>
@@ -39,10 +39,7 @@ where
     R: AuthorRepository + ProjectRepository + LogRepository,
 {
     pub fn new(repo: R) -> Self {
-        Self {
-            repo,
-            local_user: None,
-        }
+        Self { repo }
     }
 }
 
@@ -58,80 +55,122 @@ where
 //     }
 // }
 
-// pub enum ServiceError {
-//     ProjectDoesNotExist,
-// }
+#[derive(Debug, thiserror::Error)]
+pub enum LogServiceError {
+    #[error("Project not found")]
+    ProjectNotFound,
+    #[error("Project exists")]
+    ProjectExists,
+    #[error("User not found")]
+    UserNotFound,
+    #[error("User exists")]
+    UserExists,
+    #[error("{0} has no read access on {1}")]
+    NoReadAccess(Username, ProjectName),
+    #[error("{0} has no write access on {1}")]
+    NoWriteAccess(Username, ProjectName),
+    #[error("{0}")]
+    InvalidUsername(InvalidUsername),
+    #[error("{0}")]
+    InvalidProjectName(InvalidProjectName),
+    #[error("error: {0}")]
+    TechnicalError(Box<dyn std::error::Error>),
+}
+impl From<InvalidUsername> for LogServiceError {
+    fn from(value: InvalidUsername) -> Self {
+        Self::InvalidUsername(value)
+    }
+}
+impl From<CreateAuthorError> for LogServiceError {
+    fn from(value: CreateAuthorError) -> Self {
+        Self::TechnicalError(Box::new(value))
+    }
+}
+impl From<CreateProjectError> for LogServiceError {
+    fn from(value: CreateProjectError) -> Self {
+        Self::TechnicalError(Box::new(value))
+    }
+}
+impl From<CreateLogError> for LogServiceError {
+    fn from(value: CreateLogError) -> Self {
+        Self::TechnicalError(Box::new(value))
+    }
+}
+impl From<RepoQueryError> for LogServiceError {
+    fn from(value: RepoQueryError) -> Self {
+        Self::TechnicalError(Box::new(value))
+    }
+}
 
 impl<R> LocalLogStoreService for LogService<R>
 where
     R: AuthorRepository + ProjectRepository + LogRepository,
 {
-    async fn new_user(&self, request: CreateAuthorRequest) -> Result<User, ()> {
-        self.repo.create_author(request).await.map_err(|_| ())
+    async fn new_user(&self, username: Username) -> Result<User, LogServiceError> {
+        let request = CreateAuthorRequest { username };
+        Ok(self.repo.create_author(request).await?)
     }
-    async fn set_local_user(&self, name: Username) -> Result<(), ()> {
-        let user = self.repo.get_author_by_name(&name).await;
-        let _ = match user {
-            Some(user) => user,
-            None => self
-                .repo
-                .create_author(CreateAuthorRequest { username: name })
-                .await
-                .map_err(|_| ())?,
-        };
-        Ok(())
-    }
-
     async fn project_info(&self, name: &str) -> Result<Project, ()> {
         self.repo.get_project_by_name(name).await.ok_or(())
     }
 
-    async fn create_project(&self, request: CreateProjectRequest) -> Result<Project, ()> {
-        self.repo.create_project(request).await.map_err(|_| ())
+    async fn new_project(
+        &self,
+        name: ProjectName,
+        owner: UserId,
+    ) -> Result<Project, LogServiceError> {
+        let request = CreateProjectRequest {
+            owner,
+            project_name: name,
+        };
+        Ok(self.repo.create_project(request).await?)
     }
 
-    async fn add_log(&self, request: CreateLogRequest) -> Result<Log, ()> {
-        if self.local_user.is_none() {
-            warn!("no local user");
-            return Err(());
-        }
-        self.repo.create_log(request).await.map_err(|_| ())
+    async fn add_log(
+        &self,
+        by: UserId,
+        on: ProjectId,
+        text: String,
+    ) -> Result<Log, LogServiceError> {
+        let request = CreateLogRequest {
+            author: by,
+            project: on,
+            text,
+        };
+        Ok(self.repo.create_log(request).await?)
     }
-
-    async fn logs(&self, project: ProjectId, page: Page) -> Result<Paged<Log>, ()> {
-        self.repo.list_project_logs(project, page).await
+    async fn logs(&self, project: ProjectId, page: Page) -> Result<Paged<Log>, LogServiceError> {
+        Ok(self.repo.list_project_logs(project, page).await?)
     }
-
-    async fn user(&self, user: &Username) -> Option<User> {
-        self.repo.get_author_by_name(user).await
-    }
-
-    async fn project(&self, name: &str) -> Option<Project> {
-        self.repo.get_project_by_name(name).await
+    async fn projects_of(&self, user: UserId) -> Vec<Project> {
+        self.repo.list_user_projects(user).await
     }
 }
 
 pub trait LocalLogStoreService {
     fn new_user(
         &self,
-        request: CreateAuthorRequest,
-    ) -> impl Future<Output = Result<User, ()>> + Send;
-    /// Set the local author for enabling default usage of user
-    fn set_local_user(&self, name: Username) -> impl Future<Output = Result<(), ()>> + Send;
+        username: Username,
+    ) -> impl Future<Output = Result<User, LogServiceError>> + Send;
     /// Return informations about the project + stats
     fn project_info(&self, name: &str) -> impl Future<Output = Result<Project, ()>> + Send;
     /// create a new project by name
-    fn create_project(
+    fn new_project(
         &self,
-        request: CreateProjectRequest,
-    ) -> impl Future<Output = Result<Project, ()>>;
+        name: ProjectName,
+        owner: UserId,
+    ) -> impl Future<Output = Result<Project, LogServiceError>>;
     /// add a log to the project
-    fn add_log(&self, request: CreateLogRequest) -> impl Future<Output = Result<Log, ()>>;
+    fn add_log(
+        &self,
+        by_user: UserId,
+        on_project: ProjectId,
+        text: String,
+    ) -> impl Future<Output = Result<Log, LogServiceError>>;
     fn logs(
         &self,
         project: ProjectId,
         page: Page,
-    ) -> impl Future<Output = Result<Paged<Log>, ()>> + Send;
-    fn user(&self, user: &Username) -> impl Future<Output = Option<User>> + Send;
-    fn project(&self, name: &str) -> impl Future<Output = Option<Project>> + Send;
+    ) -> impl Future<Output = Result<Paged<Log>, LogServiceError>> + Send;
+    fn projects_of(&self, user: UserId) -> impl Future<Output = Vec<Project>> + Send;
 }

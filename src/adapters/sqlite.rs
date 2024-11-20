@@ -8,7 +8,8 @@ use crate::{
         model::{Log, Project, ProjectId, User, UserId, Username},
         repo::{
             AuthorRepository, CreateAuthorError, CreateAuthorRequest, CreateLogError,
-            CreateLogRequest, CreateProjectRequest, LogRepository, ProjectRepository,
+            CreateLogRequest, CreateProjectError, CreateProjectRequest, LogRepository,
+            ProjectRepository, RepoQueryError,
         },
     },
     Page, Paged,
@@ -42,12 +43,12 @@ impl AuthorRepository for Sqlite {
             .await
             .map_err(|e| {
                 warn!("{e}");
-                CreateAuthorError
+                CreateAuthorError(e.to_string())
             })?;
         Ok(new_author)
     }
 
-    async fn get_author_by_name(&self, username: &Username) -> Option<User> {
+    async fn get_user_by_name(&self, username: &Username) -> Option<User> {
         sqlx::query_as("SELECT (id,name) FROM author WHERE name = ?")
             .bind(username)
             .fetch_one(&self.pool)
@@ -56,7 +57,7 @@ impl AuthorRepository for Sqlite {
             .ok()
     }
 
-    async fn get_author_by_id(&self, id: UserId) -> Option<User> {
+    async fn get_user_by_id(&self, id: UserId) -> Option<User> {
         sqlx::query_as("SELECT (id,name) FROM author WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
@@ -91,8 +92,7 @@ impl LogRepository for Sqlite {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            warn!("{e}");
-            CreateLogError
+            CreateLogError(e.to_string())
         })?;
         // tx.commit().await.map_err(|e| {
         //     warn!("{e}");
@@ -102,7 +102,11 @@ impl LogRepository for Sqlite {
     }
 
     /// Fetches all rows. Not streaming
-    async fn list_project_logs(&self, project: ProjectId, page: Page) -> Result<Paged<Log>, ()> {
+    async fn list_project_logs(
+        &self,
+        project: ProjectId,
+        page: Page,
+    ) -> Result<Paged<Log>, RepoQueryError> {
         let logs: Vec<Log> = sqlx::query_as("SELECT (id,author,created,version,revision,text) FROM log WHERE project = ? LIMIT ? OFFSET ?")
             .bind(project)
             .bind(page.page_size() as i32)
@@ -110,21 +114,24 @@ impl LogRepository for Sqlite {
             .bind(project)
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| warn!("{e}"))?;
+            .map_err(|e| {warn!("{e}"); RepoQueryError(e.to_string())})?;
         use crate::Paginable;
         Ok(logs.to_paged(page))
     }
 }
 
 impl ProjectRepository for Sqlite {
-    async fn create_project(&self, request: CreateProjectRequest) -> Result<Project, ()> {
+    async fn create_project(
+        &self,
+        request: CreateProjectRequest,
+    ) -> Result<Project, CreateProjectError> {
         let CreateProjectRequest {
-            author,
+            owner: author,
             project_name,
         } = request;
         let project = Project::new(project_name, author);
         let _ = sqlx::query(
-            "INSERT INTO project (id,author,created,version,revision,name) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+            "INSERT INTO project (id,author,created,version,revision,name) VALUES ($1,$2,$3,$4,$5,$6)",
         )
         .bind(project.id())
         .bind(project.meta.author)
@@ -134,7 +141,8 @@ impl ProjectRepository for Sqlite {
         .bind(&project.name)
         .execute(&self.pool)
         .await
-        .map_err(|e| warn!("{e}"))?;
+        .map_err(|e| {
+                warn!("{e}"); CreateProjectError(format!("{e:?}"))})?;
         Ok(project)
     }
     async fn get_project_by_name(&self, name: &str) -> Option<Project> {
@@ -149,11 +157,22 @@ impl ProjectRepository for Sqlite {
     }
 
     async fn get_project_by_id(&self, id: ProjectId) -> Option<Project> {
-        sqlx::query_as("SELECT (id,author,created,version,revision,name) FROM author WHERE id = ?")
+        sqlx::query_as("SELECT (id,author,created,version,revision,name) FROM project WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await
             .map_err(|e| warn!("{e}"))
             .ok()
+    }
+    async fn list_user_projects(&self, id: UserId) -> Vec<Project> {
+        sqlx::query_as(
+            "SELECT (id,author,created,version,revision,name) FROM project WHERE author = ?",
+        )
+        .bind(id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| warn!("{e}"))
+        .ok()
+        .unwrap_or_default()
     }
 }
