@@ -38,11 +38,8 @@ pub enum NewArgs {
 }
 #[derive(Debug, Args, Clone)]
 pub struct NewLogArgs {
-    #[clap(short, long)]
     author: UserId,
-    #[clap(short, long)]
     project: ProjectId,
-    #[clap(trailing_var_arg = true, allow_hyphen_values = false)]
     text: String,
 }
 #[derive(Debug, Args, Clone)]
@@ -58,6 +55,8 @@ pub struct NewProjectArgs {
 pub enum ListArgs {
     Logs(ListLogsArgs),
     Projects(ListProjectsArgs),
+    #[cfg(feature = "admin")]
+    Users(PageArgs),
 }
 #[derive(Debug, Args, Clone)]
 pub struct ListLogsArgs {
@@ -148,6 +147,9 @@ async fn main() {
             },
             ListArgs::Projects(ListProjectsArgs { user }) => {
                 println!("{:?}", service.projects_of(user).await);
+            }
+            ListArgs::Users(page) => {
+                println!("{:?}", service.list_users(page.into()).await);
             }
         },
     }

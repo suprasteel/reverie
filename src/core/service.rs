@@ -110,9 +110,9 @@ where
         let request = CreateAuthorRequest { username };
         Ok(self.repo.create_author(request).await?)
     }
-    async fn project_info(&self, name: &str) -> Result<Project, ()> {
-        self.repo.get_project_by_name(name).await.ok_or(())
-    }
+    // async fn project_info(&self, name: &str) -> Result<ProjectDetails, ()> {
+    //     self.repo.get_project_by_name(name).await.ok_or(())
+    // }
 
     async fn new_project(
         &self,
@@ -143,7 +143,11 @@ where
         Ok(self.repo.list_project_logs(project, page).await?)
     }
     async fn projects_of(&self, user: UserId) -> Vec<Project> {
-        self.repo.list_user_projects(user).await
+        self.repo.list_projects_for_user(user).await
+    }
+    #[cfg(feature = "admin")]
+    async fn list_users(&self, page: Page) -> Paged<User> {
+        self.repo.list_users(page).await
     }
 }
 
@@ -152,8 +156,10 @@ pub trait LocalLogStoreService {
         &self,
         username: Username,
     ) -> impl Future<Output = Result<User, LogServiceError>> + Send;
+
     /// Return informations about the project + stats
-    fn project_info(&self, name: &str) -> impl Future<Output = Result<Project, ()>> + Send;
+    // fn project_info(&self, name: &str) -> impl Future<Output = Result<Project, ()>> + Send;
+
     /// create a new project by name
     fn new_project(
         &self,
@@ -173,4 +179,5 @@ pub trait LocalLogStoreService {
         page: Page,
     ) -> impl Future<Output = Result<Paged<Log>, LogServiceError>> + Send;
     fn projects_of(&self, user: UserId) -> impl Future<Output = Vec<Project>> + Send;
+    fn list_users(&self, page: Page) -> impl Future<Output = Paged<User>> + Send;
 }

@@ -9,7 +9,7 @@ use derive_more::derive::{Display, Error};
 macro_rules! create_id {
     ($name:ident) => {
         #[derive(Debug, Clone, Copy)]
-        #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+        #[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow))]
         #[cfg_attr(feature = "sqlx", sqlx(transparent))]
         pub struct $name(sqlx::types::Uuid);
 
@@ -95,16 +95,21 @@ impl Date {
 #[derive(Debug, Display, Error)]
 #[display("invalid username {} (reason: {})", 0, 1)]
 pub struct InvalidUsername(pub String, pub &'static str);
-// impl std::error::Error for InvalidUsername {}
 impl From<(&str, &'static str)> for InvalidUsername {
     fn from((username, reason): (&str, &'static str)) -> Self {
         Self(username.to_string(), reason)
     }
 }
 #[derive(Debug, Clone, Display)]
-#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Decode, sqlx::Encode, sqlx::FromRow))]
 #[cfg_attr(feature = "sqlx", sqlx(transparent))]
 pub struct Username(String);
+#[cfg(feature = "sqlx")]
+impl sqlx::Type<sqlx::Sqlite> for Username {
+    fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
+        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+    }
+}
 impl FromStr for Username {
     type Err = InvalidUsername;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -153,6 +158,23 @@ impl FromStr for ProjectName {
 pub struct User {
     id: UserId,
     pub(crate) name: Username,
+}
+// TODO: REMOVE
+impl From<(uuid::Uuid, String)> for User {
+    fn from((id, name): (uuid::Uuid, String)) -> Self {
+        Self {
+            id: UserId(id),
+            name: Username(name),
+        }
+    }
+}
+impl From<([u8; 16], String)> for User {
+    fn from((id, name): ([u8; 16], String)) -> Self {
+        Self {
+            id: UserId(uuid::Uuid::from_bytes(id)),
+            name: Username(name),
+        }
+    }
 }
 impl User {
     pub fn create(name: Username) -> Self {

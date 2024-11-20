@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::Context;
-use tracing::warn;
+use tracing::{instrument, warn};
 
 use crate::{
     core::{
@@ -12,7 +12,7 @@ use crate::{
             ProjectRepository, RepoQueryError,
         },
     },
-    Page, Paged,
+    Page, Paged, ProjectName,
 };
 
 #[derive(Debug, Clone)]
@@ -49,7 +49,7 @@ impl AuthorRepository for Sqlite {
     }
 
     async fn get_user_by_name(&self, username: &Username) -> Option<User> {
-        sqlx::query_as("SELECT (id,name) FROM author WHERE name = ?")
+        sqlx::query_as("SELECT id,name FROM author WHERE name = ?")
             .bind(username)
             .fetch_one(&self.pool)
             .await
@@ -58,12 +58,31 @@ impl AuthorRepository for Sqlite {
     }
 
     async fn get_user_by_id(&self, id: UserId) -> Option<User> {
-        sqlx::query_as("SELECT (id,name) FROM author WHERE id = ?")
+        sqlx::query_as("SELECT id,name FROM author WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await
             .map_err(|e| warn!("{e}"))
             .ok()
+    }
+
+    #[instrument]
+    async fn list_users(&self, page: Page) -> Paged<User> {
+        use crate::Paginable;
+        // let users: Vec<([u8; 15], String)> = sqlx::query_as("SELECT (id,name) FROM author")
+        sqlx::query_as("SELECT id,name FROM author")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| warn!("{e}"))
+            .ok()
+            .unwrap_or_default()
+            // .unwrap_or_default();
+            .to_paged(page)
+        // users
+        //     .into_iter()
+        //     .map(|u| u.into())
+        //     .collect::<Vec<User>>()
+        //     .to_paged(page)
     }
 }
 
@@ -145,7 +164,7 @@ impl ProjectRepository for Sqlite {
                 warn!("{e}"); CreateProjectError(format!("{e:?}"))})?;
         Ok(project)
     }
-    async fn get_project_by_name(&self, name: &str) -> Option<Project> {
+    async fn get_project_by_name(&self, name: &ProjectName) -> Option<Project> {
         sqlx::query_as(
             "SELECT (id,author,created,version,revision,name) FROM project WHERE name = ?",
         )
@@ -164,15 +183,13 @@ impl ProjectRepository for Sqlite {
             .map_err(|e| warn!("{e}"))
             .ok()
     }
-    async fn list_user_projects(&self, id: UserId) -> Vec<Project> {
-        sqlx::query_as(
-            "SELECT (id,author,created,version,revision,name) FROM project WHERE author = ?",
-        )
-        .bind(id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| warn!("{e}"))
-        .ok()
-        .unwrap_or_default()
+    async fn list_projects_for_user(&self, id: UserId) -> Vec<Project> {
+        sqlx::query_as("SELECT (id,author,created,version,revision,name) FROM project WHERE id = ?")
+            .bind(id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| warn!("{e}"))
+            .ok()
+            .unwrap_or_default()
     }
 }

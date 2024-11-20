@@ -47,6 +47,8 @@ pub trait AuthorRepository: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Result<User, CreateAuthorError>> + Send;
     fn get_user_by_name(&self, username: &Username) -> impl Future<Output = Option<User>> + Send;
     fn get_user_by_id(&self, id: UserId) -> impl Future<Output = Option<User>> + Send;
+    #[cfg(feature = "admin")]
+    fn list_users(&self, page: Page) -> impl Future<Output = Paged<User>> + Send;
 }
 
 pub trait ProjectRepository: Clone + Send + Sync + 'static {
@@ -55,9 +57,12 @@ pub trait ProjectRepository: Clone + Send + Sync + 'static {
         &self,
         request: CreateProjectRequest,
     ) -> impl Future<Output = Result<Project, CreateProjectError>> + Send;
-    fn get_project_by_name(&self, name: &str) -> impl Future<Output = Option<Project>> + Send;
+    fn get_project_by_name(
+        &self,
+        name: &ProjectName,
+    ) -> impl Future<Output = Option<Project>> + Send;
     fn get_project_by_id(&self, id: ProjectId) -> impl Future<Output = Option<Project>> + Send;
-    fn list_user_projects(&self, id: UserId) -> impl Future<Output = Vec<Project>> + Send;
+    fn list_projects_for_user(&self, id: UserId) -> impl Future<Output = Vec<Project>> + Send;
 }
 
 pub trait LogRepository: Clone + Send + Sync + 'static {
