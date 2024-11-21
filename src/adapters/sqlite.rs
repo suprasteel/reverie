@@ -69,20 +69,13 @@ impl AuthorRepository for Sqlite {
     #[instrument]
     async fn list_users(&self, page: Page) -> Paged<User> {
         use crate::Paginable;
-        // let users: Vec<([u8; 15], String)> = sqlx::query_as("SELECT (id,name) FROM author")
         sqlx::query_as("SELECT id,name FROM author")
             .fetch_all(&self.pool)
             .await
             .map_err(|e| warn!("{e}"))
             .ok()
             .unwrap_or_default()
-            // .unwrap_or_default();
             .to_paged(page)
-        // users
-        //     .into_iter()
-        //     .map(|u| u.into())
-        //     .collect::<Vec<User>>()
-        //     .to_paged(page)
     }
 }
 
@@ -165,18 +158,16 @@ impl ProjectRepository for Sqlite {
         Ok(project)
     }
     async fn get_project_by_name(&self, name: &ProjectName) -> Option<Project> {
-        sqlx::query_as(
-            "SELECT (id,author,created,version,revision,name) FROM project WHERE name = ?",
-        )
-        .bind(name)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| warn!("{e}"))
-        .ok()
+        sqlx::query_as("SELECT id,author,created,version,revision,name FROM project WHERE name = ?")
+            .bind(name)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| warn!("{e}"))
+            .ok()
     }
 
     async fn get_project_by_id(&self, id: ProjectId) -> Option<Project> {
-        sqlx::query_as("SELECT (id,author,created,version,revision,name) FROM project WHERE id = ?")
+        sqlx::query_as("SELECT id,author,created,version,revision,name FROM project WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await
@@ -184,7 +175,7 @@ impl ProjectRepository for Sqlite {
             .ok()
     }
     async fn list_projects_for_user(&self, id: UserId) -> Vec<Project> {
-        sqlx::query_as("SELECT (id,author,created,version,revision,name) FROM project WHERE id = ?")
+        sqlx::query_as("SELECT id,author,created,version,revision,name FROM project WHERE id = ?")
             .bind(id)
             .fetch_all(&self.pool)
             .await

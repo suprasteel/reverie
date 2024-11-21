@@ -1,4 +1,6 @@
+use derive_more::derive::Display;
 use itertools::Itertools;
+use tracing_subscriber::field::display;
 
 #[cfg_attr(feature = "dtos", derive(serde::Deserialize))]
 #[derive(Debug, Clone)]
@@ -56,7 +58,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            " * Page {:02} *\n\n{:?}",
+            "---\n * Page {:02} *\n{}\n---",
             self.page,
             self.data.iter().join("\n")
         )

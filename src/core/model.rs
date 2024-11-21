@@ -93,7 +93,7 @@ impl Date {
 }
 
 #[derive(Debug, Display, Error)]
-#[display("invalid username {} (reason: {})", 0, 1)]
+#[display("invalid username {} (reason: {})", self.0, self.1)]
 pub struct InvalidUsername(pub String, pub &'static str);
 impl From<(&str, &'static str)> for InvalidUsername {
     fn from((username, reason): (&str, &'static str)) -> Self {

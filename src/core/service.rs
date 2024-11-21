@@ -149,6 +149,15 @@ where
     async fn list_users(&self, page: Page) -> Paged<User> {
         self.repo.list_users(page).await
     }
+
+    async fn projects_of_named(&self, name: Username) -> Result<Vec<Project>, LogServiceError> {
+        let user = self
+            .repo
+            .get_user_by_name(&name)
+            .await
+            .ok_or(LogServiceError::UserNotFound)?;
+        Ok(self.projects_of(user.id()).await)
+    }
 }
 
 pub trait LocalLogStoreService {
@@ -179,5 +188,9 @@ pub trait LocalLogStoreService {
         page: Page,
     ) -> impl Future<Output = Result<Paged<Log>, LogServiceError>> + Send;
     fn projects_of(&self, user: UserId) -> impl Future<Output = Vec<Project>> + Send;
+    fn projects_of_named(
+        &self,
+        user: Username,
+    ) -> impl Future<Output = Result<Vec<Project>, LogServiceError>> + Send;
     fn list_users(&self, page: Page) -> impl Future<Output = Paged<User>> + Send;
 }

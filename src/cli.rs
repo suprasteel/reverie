@@ -1,27 +1,16 @@
-use clap::{Args, Parser};
+use std::str::FromStr;
+
+use clap::{ArgGroup, Args, Parser};
 use derive_more::derive::Display;
 use itertools::Itertools;
 use reverie::{
     LocalLogStoreService, LogService, Page, ProjectId, ProjectLog, ProjectName, SqliteRepo, UserId,
     Username,
 };
-// /// Six0One 601 > log
-// #[derive(Debug, Parser)]
-// #[command(name = "Six0One")]
-// pub struct S0OArgs {
-//     project: String,
-//     content: String,
-// }
 #[derive(Debug, Parser)]
 pub struct CliArgs {
     #[clap(subcommand)]
     cmd: CmdArgs,
-    // #[clap(short, long, default_value = "default")]
-    // project: String,
-    // #[clap(short, long, default_value = "me")]
-    // author: String,
-    // #[clap(flatten)]
-    // page: PageArg,
 }
 #[derive(Debug, clap::Subcommand)]
 pub enum CmdArgs {
@@ -66,7 +55,35 @@ pub struct ListLogsArgs {
 }
 #[derive(Debug, Args, Clone)]
 pub struct ListProjectsArgs {
-    user: UserId,
+    user: UserIdOrNameArg,
+}
+#[derive(Debug, Clone, clap::Args)]
+#[clap(group(
+    ArgGroup::new("auth")
+        .required(true)
+        .multiple(false)
+        .args(&["token","username"])))]
+struct UserIdOrNameArg {
+    id: Option<UserId>,
+    name: Option<Username>,
+}
+impl FromStr for UserIdOrNameArg {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(id) = UserId::from_str(s) {
+            Ok(Self {
+                id: Some(id),
+                name: None,
+            })
+        } else if let Ok(name) = Username::from_str(s) {
+            Ok(Self {
+                id: None,
+                name: Some(name),
+            })
+        } else {
+            Err("not an id not a name".into())
+        }
+    }
 }
 #[derive(Debug, Args, Clone, Display)]
 #[display("{}", value.iter().join(" "))]
@@ -98,10 +115,6 @@ impl From<PageArgs> for Page {
 }
 #[tokio::main]
 async fn main() {
-    // load config
-    // let config = Config::default();
-
-    // set loging
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
         .init();
@@ -109,12 +122,7 @@ async fn main() {
     let repo = SqliteRepo::new("/tmp/db.sqlite").await.unwrap();
     let service = LogService::new(repo);
 
-    let CliArgs {
-        cmd,
-        // project,
-        // author,
-        // page,
-    } = CliArgs::parse();
+    let CliArgs { cmd } = CliArgs::parse();
 
     match cmd {
         CmdArgs::New(new) => match new {
@@ -145,11 +153,13 @@ async fn main() {
                 Ok(logs) => println!("{logs}"),
                 Err(e) => print!("{e}"),
             },
-            ListArgs::Projects(ListProjectsArgs { user }) => {
-                println!("{:?}", service.projects_of(user).await);
-            }
+            ListArgs::Projects(ListProjectsArgs { user }) => match (user.id, user.name) {
+                (Some(id), _) => println!("{:?}", service.projects_of(id).await),
+                (None, Some(name)) => println!("{:?}", service.projects_of_named(name).await),
+                (_, _) => println!("oops"),
+            },
             ListArgs::Users(page) => {
-                println!("{:?}", service.list_users(page.into()).await);
+                println!("{}", service.list_users(page.into()).await);
             }
         },
     }
