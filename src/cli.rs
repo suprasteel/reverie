@@ -13,7 +13,7 @@ pub struct CliArgs {
     cmd: CmdArgs,
 }
 #[derive(Debug, clap::Subcommand)]
-pub enum CmdArgs {
+enum CmdArgs {
     #[clap(subcommand)]
     New(NewArgs),
     #[clap(subcommand)]
@@ -37,15 +37,19 @@ pub struct NewUserArgs {
 }
 #[derive(Debug, Args, Clone)]
 pub struct NewProjectArgs {
-    owner: UserId,
     name: ProjectName,
+    owner: UserIdOrNameArg,
 }
 #[derive(Debug, clap::Subcommand)]
-pub enum ListArgs {
+enum ListArgs {
     Logs(ListLogsArgs),
     Projects(ListProjectsArgs),
     #[cfg(feature = "admin")]
     Users(PageArgs),
+}
+#[derive(Debug, Args, Clone)]
+pub struct ListProjectsArgs {
+    user: UserIdOrNameArg,
 }
 #[derive(Debug, Args, Clone)]
 pub struct ListLogsArgs {
@@ -53,16 +57,12 @@ pub struct ListLogsArgs {
     #[clap(flatten)]
     pagination: PageArgs,
 }
-#[derive(Debug, Args, Clone)]
-pub struct ListProjectsArgs {
-    user: UserIdOrNameArg,
-}
 #[derive(Debug, Clone, clap::Args)]
 #[clap(group(
-    ArgGroup::new("auth")
+    ArgGroup::new("user")
         .required(true)
         .multiple(false)
-        .args(&["token","username"])))]
+        .args(&["id","name"])))]
 struct UserIdOrNameArg {
     id: Option<UserId>,
     name: Option<Username>,
@@ -138,10 +138,20 @@ async fn main() {
                 Ok(user) => println!("created {user}"),
                 Err(_) => println!("Could not create user"),
             },
-            NewArgs::Project(NewProjectArgs { owner, name }) => {
-                match service.new_project(name, owner).await {
-                    Ok(project) => println!("created {project}"),
-                    Err(e) => print!("{e}"),
+            NewArgs::Project(NewProjectArgs {
+                name: project,
+                owner: UserIdOrNameArg { id, name },
+            }) => {
+                let user_id = match (id, name) {
+                    (Some(id), _) => Some(id),
+                    (_, Some(name)) => service.get_user_id(name).await.map(|u| u.id()),
+                    (_, _) => None,
+                };
+                if let Some(user_id) = user_id {
+                    match service.new_project(project, user_id).await {
+                        Ok(project) => println!("created {project}"),
+                        Err(e) => print!("{e}"),
+                    }
                 }
             }
         },
@@ -153,7 +163,9 @@ async fn main() {
                 Ok(logs) => println!("{logs}"),
                 Err(e) => print!("{e}"),
             },
-            ListArgs::Projects(ListProjectsArgs { user }) => match (user.id, user.name) {
+            ListArgs::Projects(ListProjectsArgs {
+                user: UserIdOrNameArg { id, name },
+            }) => match (id, name) {
                 (Some(id), _) => println!("{:?}", service.projects_of(id).await),
                 (None, Some(name)) => println!("{:?}", service.projects_of_named(name).await),
                 (_, _) => println!("oops"),
