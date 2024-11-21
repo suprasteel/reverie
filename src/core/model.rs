@@ -117,7 +117,7 @@ impl FromStr for Username {
             return Ok(Self("me".to_string()));
         }
         let chars_count = s.chars().count();
-        if chars_count < 6 {
+        if chars_count < 4 {
             Err((s, "too short").into())
         } else if 24 < chars_count {
             Err((s, "too long").into())
@@ -190,7 +190,7 @@ impl User {
         &self.name
     }
 }
-#[derive(Debug, Display)]
+#[derive(Debug, Clone, Display)]
 #[display("Project #{id} - {name} (owned by {})", meta.author)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow, sqlx::Encode))]
 pub struct Project {

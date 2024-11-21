@@ -142,21 +142,25 @@ where
     async fn logs(&self, project: ProjectId, page: Page) -> Result<Paged<Log>, LogServiceError> {
         Ok(self.repo.list_project_logs(project, page).await?)
     }
-    async fn projects_of(&self, user: UserId) -> Vec<Project> {
-        self.repo.list_user_projects(user).await
+    async fn projects_of(&self, user: UserId, page: Page) -> Paged<Project> {
+        self.repo.list_user_projects(user, page).await
     }
     #[cfg(feature = "admin")]
     async fn list_users(&self, page: Page) -> Paged<User> {
         self.repo.list_users(page).await
     }
 
-    async fn projects_of_named(&self, name: Username) -> Result<Vec<Project>, LogServiceError> {
+    async fn projects_of_named(
+        &self,
+        name: Username,
+        page: Page,
+    ) -> Result<Paged<Project>, LogServiceError> {
         let user = self
             .repo
             .get_user_by_name(&name)
             .await
             .ok_or(LogServiceError::UserNotFound)?;
-        Ok(self.projects_of(user.id()).await)
+        Ok(self.projects_of(user.id(), page).await)
     }
     async fn get_user_id(&self, username: Username) -> Option<User> {
         self.repo.get_user_by_name(&username).await
@@ -191,10 +195,11 @@ pub trait LocalLogStoreService {
         project: ProjectId,
         page: Page,
     ) -> impl Future<Output = Result<Paged<Log>, LogServiceError>> + Send;
-    fn projects_of(&self, user: UserId) -> impl Future<Output = Vec<Project>> + Send;
+    fn projects_of(&self, user: UserId, page: Page) -> impl Future<Output = Paged<Project>> + Send;
     fn projects_of_named(
         &self,
         user: Username,
-    ) -> impl Future<Output = Result<Vec<Project>, LogServiceError>> + Send;
+        page: Page,
+    ) -> impl Future<Output = Result<Paged<Project>, LogServiceError>> + Send;
     fn list_users(&self, page: Page) -> impl Future<Output = Paged<User>> + Send;
 }

@@ -27,7 +27,9 @@ pub enum NewArgs {
 }
 #[derive(Debug, Args, Clone)]
 pub struct NewLogArgs {
+    #[clap(short, long)]
     author: UserId,
+    #[clap(short, long)]
     project: ProjectId,
     text: String,
 }
@@ -50,6 +52,8 @@ enum ListArgs {
 #[derive(Debug, Args, Clone)]
 pub struct ListProjectsArgs {
     user: UserIdOrNameArg,
+    #[clap(flatten)]
+    page: PageArgs,
 }
 #[derive(Debug, Args, Clone)]
 pub struct ListLogsArgs {
@@ -159,15 +163,13 @@ async fn main() {
             ListArgs::Logs(ListLogsArgs {
                 project,
                 pagination,
-            }) => match service.logs(project, pagination.into()).await {
-                Ok(logs) => println!("{logs}"),
-                Err(e) => print!("{e}"),
-            },
+            }) => service.logs(project, pagination.into()).await.display(),
             ListArgs::Projects(ListProjectsArgs {
+                page,
                 user: UserIdOrNameArg { id, name },
             }) => match (id, name) {
-                (Some(id), _) => println!("{:?}", service.projects_of(id).await),
-                (None, Some(name)) => println!("{:?}", service.projects_of_named(name).await),
+                (Some(id), _) => println!("{}", service.projects_of(id, page.into()).await),
+                (None, Some(name)) => service.projects_of_named(name, page.into()).await.display(),
                 (_, _) => println!("oops"),
             },
             ListArgs::Users(page) => {
@@ -176,6 +178,35 @@ async fn main() {
         },
     }
     // store.save(&db);
+}
+
+trait DisplayMonad {
+    fn display(&self);
+}
+
+impl<T, E> DisplayMonad for Result<T, E>
+where
+    T: std::fmt::Display,
+    E: std::fmt::Display,
+{
+    fn display(&self) {
+        match self {
+            Ok(t) => println!("{t}"),
+            Err(e) => println!("{e}"),
+        }
+    }
+}
+
+impl<T> DisplayMonad for Option<T>
+where
+    T: std::fmt::Display,
+{
+    fn display(&self) {
+        match self {
+            Some(t) => println!("{t}"),
+            None => println!(" ø "),
+        }
+    }
 }
 
 // we have projects

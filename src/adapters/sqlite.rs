@@ -12,7 +12,7 @@ use crate::{
             ProjectRepository, RepoQueryError,
         },
     },
-    Page, Paged, ProjectName,
+    Page, Paged, Paginable, ProjectName,
 };
 
 #[derive(Debug, Clone)]
@@ -176,15 +176,18 @@ impl ProjectRepository for Sqlite {
             .map_err(|e| warn!("{e}"))
             .ok()
     }
-    async fn list_user_projects(&self, user: UserId) -> Vec<Project> {
-        sqlx::query_as(
-            "SELECT id,author,created,version,revision,name FROM project WHERE author = ?",
+    async fn list_user_projects(&self, user: UserId, page: Page) -> Paged<Project> {
+        Paginable::to_paged(
+            sqlx::query_as(
+                "SELECT id,author,created,version,revision,name FROM project WHERE author = ?",
+            )
+            .bind(user)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| warn!("{e}"))
+            .ok()
+            .unwrap_or_default(),
+            page,
         )
-        .bind(user)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| warn!("{e}"))
-        .ok()
-        .unwrap_or_default()
     }
 }
