@@ -28,7 +28,7 @@ pub enum NewArgs {
 #[derive(Debug, Args, Clone)]
 pub struct NewLogArgs {
     #[clap(short, long)]
-    author: UserId,
+    author: UserIdOrNameArg,
     #[clap(short, long)]
     project: ProjectId,
     text: String,
@@ -117,6 +117,20 @@ impl From<PageArgs> for Page {
         Self::new(page, size)
     }
 }
+
+async fn get_user_id<T>(
+    UserIdOrNameArg { id, name }: UserIdOrNameArg,
+    service: &T,
+) -> Option<UserId>
+where
+    T: LocalLogStoreService,
+{
+    match (id, name) {
+        (Some(id), _) => Some(id),
+        (_, Some(name)) => service.get_user_id(name).await.map(|u| u.id()),
+        (_, _) => None,
+    }
+}
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -134,28 +148,31 @@ async fn main() {
                 author,
                 project,
                 text,
-            }) => match service.add_log(author, project, text).await {
-                Ok(log) => println!("{log:?}"),
-                Err(e) => println!("{e}"),
-            },
+            }) => {
+                if let Some(user_id) = get_user_id(author, &service).await {
+                    match service.add_log(user_id, project, text).await {
+                        Ok(log) => println!("{log}"),
+                        Err(e) => println!("{e}"),
+                    }
+                } else {
+                    println!("user not found");
+                }
+            }
             NewArgs::User(NewUserArgs { username }) => match service.new_user(username).await {
                 Ok(user) => println!("created {user}"),
                 Err(_) => println!("Could not create user"),
             },
             NewArgs::Project(NewProjectArgs {
                 name: project,
-                owner: UserIdOrNameArg { id, name },
+                owner,
             }) => {
-                let user_id = match (id, name) {
-                    (Some(id), _) => Some(id),
-                    (_, Some(name)) => service.get_user_id(name).await.map(|u| u.id()),
-                    (_, _) => None,
-                };
-                if let Some(user_id) = user_id {
+                if let Some(user_id) = get_user_id(owner, &service).await {
                     match service.new_project(project, user_id).await {
                         Ok(project) => println!("created {project}"),
                         Err(e) => print!("{e}"),
                     }
+                } else {
+                    println!("user not found");
                 }
             }
         },
