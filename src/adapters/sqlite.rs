@@ -69,7 +69,9 @@ impl AuthorRepository for Sqlite {
     #[instrument]
     async fn list_users(&self, page: Page) -> Paged<User> {
         use crate::Paginable;
-        sqlx::query_as("SELECT id,name FROM author")
+        sqlx::query_as("SELECT id,name FROM author LIMIT ? OFFSET ?")
+            .bind(page.page_size() as i32)
+            .bind(page.offset() as i32)
             .fetch_all(&self.pool)
             .await
             .map_err(|e| warn!("{e}"))
@@ -174,13 +176,15 @@ impl ProjectRepository for Sqlite {
             .map_err(|e| warn!("{e}"))
             .ok()
     }
-    async fn list_projects_for_user(&self, id: UserId) -> Vec<Project> {
-        sqlx::query_as("SELECT id,author,created,version,revision,name FROM project WHERE id = ?")
-            .bind(id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| warn!("{e}"))
-            .ok()
-            .unwrap_or_default()
+    async fn list_user_projects(&self, user: UserId) -> Vec<Project> {
+        sqlx::query_as(
+            "SELECT id,author,created,version,revision,name FROM project WHERE author = ?",
+        )
+        .bind(user)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| warn!("{e}"))
+        .ok()
+        .unwrap_or_default()
     }
 }
