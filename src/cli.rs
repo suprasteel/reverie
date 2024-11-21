@@ -7,6 +7,7 @@ use reverie::{
     LocalLogStoreService, LogService, Page, ProjectId, ProjectLog, ProjectName, SqliteRepo, UserId,
     Username,
 };
+use tracing_subscriber::{filter, fmt, layer::SubscriberExt};
 #[derive(Debug, Parser)]
 pub struct CliArgs {
     #[clap(subcommand)]
@@ -18,12 +19,44 @@ enum CmdArgs {
     New(NewArgs),
     #[clap(subcommand)]
     List(ListArgs),
+    #[clap(subcommand)]
+    Id(IdArgs),
+    #[clap(subcommand)]
+    Search(SearchArgs),
 }
 #[derive(Debug, clap::Subcommand)]
 pub enum NewArgs {
     Log(NewLogArgs),
-    User(NewUserArgs),
-    Project(NewProjectArgs),
+    User(UsernameArg),
+    Project(UserProjectArgs),
+}
+#[derive(Debug, clap::Subcommand)]
+pub enum IdArgs {
+    User(UsernameArg),
+    Project(UserProjectArgs),
+}
+#[derive(Debug, clap::Subcommand)]
+pub enum SearchArgs {
+    Logs(SearchLogsArgs),
+    Projects(SearchProjectsArgs),
+}
+#[derive(Debug, Args, Clone)]
+pub struct SearchLogsArgs {
+    #[clap(short, long)]
+    user: Username,
+    #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
+    desc: String,
+    // before: Date,
+    // after: Date,
+}
+#[derive(Debug, Args, Clone)]
+pub struct SearchProjectsArgs {}
+#[derive(Debug, Args, Clone)]
+pub struct LogDescriptionArgs {
+    #[clap(trailing_var_arg = true, allow_hyphen_values = false)]
+    desc: String,
+    #[clap(short, long)]
+    user: Username,
 }
 #[derive(Debug, Args, Clone)]
 pub struct NewLogArgs {
@@ -34,11 +67,11 @@ pub struct NewLogArgs {
     text: String,
 }
 #[derive(Debug, Args, Clone)]
-pub struct NewUserArgs {
+pub struct UsernameArg {
     username: Username,
 }
 #[derive(Debug, Args, Clone)]
-pub struct NewProjectArgs {
+pub struct UserProjectArgs {
     name: ProjectName,
     owner: UserIdOrNameArg,
 }
@@ -174,8 +207,10 @@ where
 }
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::TRACE)
+    use tracing_subscriber::util::SubscriberInitExt;
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(filter::EnvFilter::from_default_env())
         .init();
 
     let repo = SqliteRepo::new("/tmp/db.sqlite").await.unwrap();
@@ -206,11 +241,11 @@ async fn main() {
                     Err(e) => println!("{e}"),
                 }
             }
-            NewArgs::User(NewUserArgs { username }) => match service.new_user(username).await {
+            NewArgs::User(UsernameArg { username }) => match service.new_user(username).await {
                 Ok(user) => println!("created {user}"),
                 Err(_) => println!("Could not create user"),
             },
-            NewArgs::Project(NewProjectArgs {
+            NewArgs::Project(UserProjectArgs {
                 name: project,
                 owner,
             }) => {
@@ -246,6 +281,14 @@ async fn main() {
             ListArgs::Users(page) => {
                 println!("{}", service.list_users(page.into()).await);
             }
+        },
+        CmdArgs::Id(subarg) => match subarg {
+            IdArgs::User(UsernameArg { username }) => {}
+            IdArgs::Project(UserProjectArgs { name, owner }) => {}
+        },
+        CmdArgs::Search(subarg) => match subarg {
+            SearchArgs::Logs(_) => {}
+            SearchArgs::Projects(_) => {}
         },
     }
     // store.save(&db);

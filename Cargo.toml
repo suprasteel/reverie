@@ -27,7 +27,7 @@ sqlx = { version = "0.8.2", features = ["sqlite", "uuid", "runtime-tokio"] }
 thiserror = "2.0.3"
 tokio = { version = "1.41.1", features = ["full"]}
 tracing = { version = "0.1.40", features = ["attributes"]}
-tracing-subscriber = "0.3.18"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.11.0", features = ["v7"] }
 
 [dev-dependencies]

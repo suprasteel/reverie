@@ -153,7 +153,7 @@ impl FromStr for ProjectName {
     }
 }
 #[derive(Debug, Clone, Display)]
-#[display("#{id}-{name}")]
+#[display("User #{id} ({name})")]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow, sqlx::Encode))]
 pub struct User {
     id: UserId,
