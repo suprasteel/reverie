@@ -51,10 +51,11 @@ impl AuthorRepository for Sqlite {
     async fn get_user_by_name(&self, username: &Username) -> Option<User> {
         sqlx::query_as("SELECT id,name FROM author WHERE name = ?")
             .bind(username)
-            .fetch_one(&self.pool)
+            .fetch_optional(&self.pool)
             .await
             .map_err(|e| warn!("{e}"))
             .ok()
+            .flatten()
     }
 
     async fn get_user_by_id(&self, id: UserId) -> Option<User> {
@@ -162,10 +163,11 @@ impl ProjectRepository for Sqlite {
     async fn get_project_by_name(&self, name: &ProjectName) -> Option<Project> {
         sqlx::query_as("SELECT id,author,created,version,revision,name FROM project WHERE name = ?")
             .bind(name)
-            .fetch_one(&self.pool)
+            .fetch_optional(&self.pool)
             .await
             .map_err(|e| warn!("{e}"))
             .ok()
+            .flatten()
     }
 
     async fn get_project_by_id(&self, id: ProjectId) -> Option<Project> {
