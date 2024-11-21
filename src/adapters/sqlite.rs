@@ -121,7 +121,7 @@ impl LogRepository for Sqlite {
         project: ProjectId,
         page: Page,
     ) -> Result<Paged<Log>, RepoQueryError> {
-        let logs: Vec<Log> = sqlx::query_as("SELECT (id,author,created,version,revision,text) FROM log WHERE project = ? LIMIT ? OFFSET ?")
+        let logs: Vec<Log> = sqlx::query_as("SELECT id,author,created,version,revision,text FROM log WHERE project = ? LIMIT ? OFFSET ?")
             .bind(project)
             .bind(page.page_size() as i32)
             .bind(page.offset() as i32)
