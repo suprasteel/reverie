@@ -191,7 +191,7 @@ impl User {
     }
 }
 #[derive(Debug, Display)]
-#[display("Project #{id} - {name} ({})", meta.author)]
+#[display("Project #{id} - {name} (owned by {})", meta.author)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow, sqlx::Encode))]
 pub struct Project {
     id: ProjectId,

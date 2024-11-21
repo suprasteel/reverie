@@ -143,7 +143,7 @@ where
         Ok(self.repo.list_project_logs(project, page).await?)
     }
     async fn projects_of(&self, user: UserId) -> Vec<Project> {
-        self.repo.list_projects_for_user(user).await
+        self.repo.list_user_projects(user).await
     }
     #[cfg(feature = "admin")]
     async fn list_users(&self, page: Page) -> Paged<User> {
@@ -158,6 +158,9 @@ where
             .ok_or(LogServiceError::UserNotFound)?;
         Ok(self.projects_of(user.id()).await)
     }
+    async fn get_user_id(&self, username: Username) -> Option<User> {
+        self.repo.get_user_by_name(&username).await
+    }
 }
 
 pub trait LocalLogStoreService {
@@ -165,9 +168,10 @@ pub trait LocalLogStoreService {
         &self,
         username: Username,
     ) -> impl Future<Output = Result<User, LogServiceError>> + Send;
-
     /// Return informations about the project + stats
     // fn project_info(&self, name: &str) -> impl Future<Output = Result<Project, ()>> + Send;
+
+    fn get_user_id(&self, username: Username) -> impl Future<Output = Option<User>> + Send;
 
     /// create a new project by name
     fn new_project(

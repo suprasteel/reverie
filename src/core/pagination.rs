@@ -1,6 +1,5 @@
-use derive_more::derive::Display;
 use itertools::Itertools;
-use tracing_subscriber::field::display;
+use tracing::trace;
 
 #[cfg_attr(feature = "dtos", derive(serde::Deserialize))]
 #[derive(Debug, Clone)]
@@ -19,14 +18,14 @@ impl Page {
         self.page
     }
     pub fn offset(&self) -> usize {
-        if self.page == 0 {
+        if self.page <= 1 {
             0
         } else {
             (self.page - 1) * self.size
         }
     }
     pub fn page_size(&self) -> usize {
-        self.page
+        self.size
     }
 }
 
@@ -49,6 +48,11 @@ impl<T> Default for Paged<T> {
             page: 1,
             data: vec![],
         }
+    }
+}
+impl<T> Paged<T> {
+    fn _len(&self) -> usize {
+        self.data.len()
     }
 }
 impl<T> std::fmt::Display for Paged<T>
@@ -101,7 +105,14 @@ where
         }
     }
     fn to_paged(self, page: Page) -> Paged<Self::Output> {
-        assert!(page.page_size() >= self.len());
+        assert!(page.page_size() >= 1, "required page size is 0. WTF.");
+        assert!(
+            self.len() <= page.page_size(),
+            "There are more elements than required by page size: ps:{}, len:{}",
+            page.page_size(),
+            self.len()
+        );
+        trace!("Returning page from list of {} elements", self.len());
         Paged {
             page: page.number(),
             data: self,

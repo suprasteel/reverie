@@ -62,7 +62,7 @@ pub trait ProjectRepository: Clone + Send + Sync + 'static {
         name: &ProjectName,
     ) -> impl Future<Output = Option<Project>> + Send;
     fn get_project_by_id(&self, id: ProjectId) -> impl Future<Output = Option<Project>> + Send;
-    fn list_projects_for_user(&self, id: UserId) -> impl Future<Output = Vec<Project>> + Send;
+    fn list_user_projects(&self, id: UserId) -> impl Future<Output = Vec<Project>> + Send;
 }
 
 pub trait LogRepository: Clone + Send + Sync + 'static {
