@@ -162,8 +162,11 @@ where
             .ok_or(LogServiceError::UserNotFound)?;
         Ok(self.projects_of(user.id(), page).await)
     }
-    async fn get_user_id(&self, username: Username) -> Option<User> {
+    async fn get_user(&self, username: Username) -> Option<User> {
         self.repo.get_user_by_name(&username).await
+    }
+    async fn get_project(&self, name: ProjectName) -> Option<Project> {
+        self.repo.get_project_by_name(&name).await
     }
 }
 
@@ -175,7 +178,8 @@ pub trait LocalLogStoreService {
     /// Return informations about the project + stats
     // fn project_info(&self, name: &str) -> impl Future<Output = Result<Project, ()>> + Send;
 
-    fn get_user_id(&self, username: Username) -> impl Future<Output = Option<User>> + Send;
+    fn get_user(&self, username: Username) -> impl Future<Output = Option<User>> + Send;
+    fn get_project(&self, name: ProjectName) -> impl Future<Output = Option<Project>> + Send;
 
     /// create a new project by name
     fn new_project(

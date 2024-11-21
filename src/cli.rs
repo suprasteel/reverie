@@ -30,7 +30,7 @@ pub struct NewLogArgs {
     #[clap(short, long)]
     author: UserIdOrNameArg,
     #[clap(short, long)]
-    project: ProjectId,
+    project: ProjectIdOrNameArg,
     text: String,
 }
 #[derive(Debug, Args, Clone)]
@@ -57,7 +57,7 @@ pub struct ListProjectsArgs {
 }
 #[derive(Debug, Args, Clone)]
 pub struct ListLogsArgs {
-    project: ProjectId,
+    project: ProjectIdOrNameArg,
     #[clap(flatten)]
     pagination: PageArgs,
 }
@@ -86,6 +86,34 @@ impl FromStr for UserIdOrNameArg {
             })
         } else {
             Err("not an id not a name".into())
+        }
+    }
+}
+#[derive(Debug, Clone, clap::Args)]
+#[clap(group(
+    ArgGroup::new("project")
+        .required(true)
+        .multiple(false)
+        .args(&["id","name"])))]
+struct ProjectIdOrNameArg {
+    id: Option<ProjectId>,
+    name: Option<ProjectName>,
+}
+impl FromStr for ProjectIdOrNameArg {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(id) = ProjectId::from_str(s) {
+            Ok(Self {
+                id: Some(id),
+                name: None,
+            })
+        } else if let Ok(name) = ProjectName::from_str(s) {
+            Ok(Self {
+                id: None,
+                name: Some(name),
+            })
+        } else {
+            Err("not an id nor a valid name".into())
         }
     }
 }
@@ -127,7 +155,20 @@ where
 {
     match (id, name) {
         (Some(id), _) => Some(id),
-        (_, Some(name)) => service.get_user_id(name).await.map(|u| u.id()),
+        (_, Some(name)) => service.get_user(name).await.map(|u| u.id()),
+        (_, _) => None,
+    }
+}
+async fn get_project_id<T>(
+    ProjectIdOrNameArg { id, name }: ProjectIdOrNameArg,
+    service: &T,
+) -> Option<ProjectId>
+where
+    T: LocalLogStoreService,
+{
+    match (id, name) {
+        (Some(id), _) => Some(id),
+        (_, Some(name)) => service.get_project(name).await.map(|p| p.id()),
         (_, _) => None,
     }
 }
@@ -149,13 +190,20 @@ async fn main() {
                 project,
                 text,
             }) => {
-                if let Some(user_id) = get_user_id(author, &service).await {
-                    match service.add_log(user_id, project, text).await {
-                        Ok(log) => println!("{log}"),
-                        Err(e) => println!("{e}"),
-                    }
-                } else {
-                    println!("user not found");
+                let project_id = get_project_id(project, &service).await;
+                let user_id = get_user_id(author, &service).await;
+                if project_id.is_none() {
+                    return println!("project not found");
+                }
+                if user_id.is_none() {
+                    return println!("user not found");
+                }
+                match service
+                    .add_log(user_id.unwrap(), project_id.unwrap(), text)
+                    .await
+                {
+                    Ok(log) => println!("{log}"),
+                    Err(e) => println!("{e}"),
                 }
             }
             NewArgs::User(NewUserArgs { username }) => match service.new_user(username).await {
@@ -180,7 +228,13 @@ async fn main() {
             ListArgs::Logs(ListLogsArgs {
                 project,
                 pagination,
-            }) => service.logs(project, pagination.into()).await.display(),
+            }) => {
+                if let Some(project_id) = get_project_id(project, &service).await {
+                    service.logs(project_id, pagination.into()).await.display()
+                } else {
+                    println!("project not found");
+                }
+            }
             ListArgs::Projects(ListProjectsArgs {
                 page,
                 user: UserIdOrNameArg { id, name },
