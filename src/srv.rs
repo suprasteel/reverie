@@ -5,7 +5,7 @@ use axum::{
     Json, Router,
 };
 use axum_macros::debug_handler;
-use reverie::{LogsStore, Page, Paged, ProjectLog};
+use reverie::{LocalLogStoreService, LogService, Page, Paged, ProjectId, SqliteRepo, UserId};
 use serde::Deserialize;
 use std::{
     net::SocketAddr,
@@ -15,10 +15,7 @@ use std::{
 use tokio::signal;
 use tracing::info;
 #[debug_handler]
-async fn add_log(
-    store: axum::extract::State<LogsService>,
-    Json(log): Json<ProjectLog>,
-) -> StatusCode {
+async fn add_log(store: axum::extract::State<AppContext>, Json(log): Json) -> StatusCode {
     store.add_log(log);
     StatusCode::CREATED
 }
@@ -37,35 +34,47 @@ impl Default for Pagination {
         Self { page: 1, size: 10 }
     }
 }
+/// Should fetch project id from (projcetname, userid)
+/// then fetch log
+/// the user sees a call like : api/project/
+/// - api/project/<id>/logs (get last logs (paged))
+/// - api/project/<id>/tasks
+/// - api/project/<id>/logs?by=me or by=coline
+/// - api/project/<id>/blockers/all
+/// - api/project/<id>/blockers/solved
+/// - api/project/<id>/blockers
+/// - api/project/<id>/blockers
+/// - api/project/<id>/update -> returns last change time and version
+/// the headers contain the user id (jwt?)
 #[debug_handler]
 async fn project_logs(
-    store: axum::extract::State<LogsService>,
+    app: axum::extract::State<AppContext>,
     axum::extract::Path(project): axum::extract::Path<String>,
     pagination: Option<Query<Pagination>>,
 ) -> (StatusCode, Json<Paged<String>>) {
     let Query(page) = pagination.unwrap_or_default();
-    (StatusCode::OK, store.get(project, &page.into()).into())
+    (StatusCode::OK, app.fetch_log(project, &page.into()).into())
 }
 
 #[derive(Clone)]
-struct LogsService {
-    store: Arc<Mutex<LogsStore>>,
+struct AppContext {
+    service: Arc<Mutex<LogService<SqliteRepo>>>,
 }
-impl From<LogsStore> for LogsService {
-    fn from(store: LogsStore) -> Self {
+impl From<LogService<SqliteRepo>> for AppContext {
+    fn from(service: LogService<SqliteRepo>) -> Self {
         Self {
-            store: Arc::new(Mutex::new(store)),
+            service: Arc::new(Mutex::new(service)),
         }
     }
 }
-impl LogsService {
-    fn add_log(&self, log: ProjectLog) {
+impl AppContext {
+    fn add_log(&self, log: String, user: UserId, project: ProjectId) {
         info!("add {log:?}");
-        self.store.lock().unwrap().add(log);
+        self.service.lock().unwrap().add_log(user, project, log);
     }
-    fn get(&self, project: String, page: &Page) -> Paged<String> {
+    fn fetch_log(&self, project: ProjectId, page: &Page) -> Paged<String> {
         info!("get {project:?}");
-        self.store.lock().unwrap().get(project, page)
+        self.service.lock().unwrap().get(project, page)
     }
 }
 
@@ -79,12 +88,12 @@ async fn main() {
     let s0o_bind_port: String = std::env::var("S0O_BIND_PORT").unwrap_or("3000".to_string());
 
     let app = Router::new()
-        .route("/project/:project", get(project_logs))
-        .route("/new/log", post(add_log));
+        .route("/project/:project/logs", get(project_logs))
+        .route("/project/:project/add/log", post(add_log));
 
-    let db = home::home_dir().unwrap().join("s0O.db");
-    let logstore = LogsStore::load(&db);
-    let store: LogsService = logstore.into();
+    let repo = SqliteRepo::new("/tmp/db.sqlite").await.unwrap();
+    let service = LogService::new(repo);
+    let store: AppContext = service.into();
     let store_clone = store.clone();
     {
         let addr: SocketAddr = format!("{}:{}", s0o_bind_ip, s0o_bind_port)
@@ -104,7 +113,6 @@ async fn main() {
         }
         info!("Server is stopping");
     }
-    store_clone.store.lock().unwrap().save(db);
 }
 
 // https://github.com/tokio-rs/axum/blob/main/examples/graceful-shutdown/src/main.rs

@@ -4,8 +4,7 @@ use clap::{ArgGroup, Args, Parser};
 use derive_more::derive::Display;
 use itertools::Itertools;
 use reverie::{
-    LocalLogStoreService, LogService, Page, ProjectId, ProjectLog, ProjectName, SqliteRepo, UserId,
-    Username,
+    LocalLogStoreService, LogService, Page, ProjectId, ProjectName, SqliteRepo, UserId, Username,
 };
 use tracing_subscriber::{filter, fmt, layer::SubscriberExt};
 #[derive(Debug, Parser)]

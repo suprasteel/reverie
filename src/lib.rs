@@ -1,5 +1,3 @@
-use std::{collections::HashMap, path::Path};
-
 mod adapters;
 mod core;
 // make pagination public
@@ -14,8 +12,6 @@ pub use core::model::Username;
 pub use core::pagination::{Page, Paged, Paginable};
 pub use core::repo::{CreateAuthorRequest, CreateLogRequest, CreateProjectRequest};
 pub use core::service::{LocalLogStoreService, LogService};
-use serde::{Deserialize, Serialize};
-use tracing::{info, instrument, warn};
 
 // #[derive(Debug)]
 // pub struct ContentId(u64);
@@ -26,16 +22,6 @@ use tracing::{info, instrument, warn};
 // #[derive(Debug)]
 // pub struct TaskId(EntryId);
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ProjectLog {
-    project: String,
-    content: String,
-}
-impl ProjectLog {
-    pub fn new(project: String, content: String) -> Self {
-        Self { project, content }
-    }
-}
 // pub struct Task {
 //     id: TaskId,
 //     meta: Metadata,
@@ -84,72 +70,3 @@ impl ProjectLog {
 //     times: u32,
 //     action: (), // todo
 // }
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct LogsStore {
-    store: HashMap<String, Vec<String>>,
-}
-pub type StoreResult<T> = Result<T, ()>;
-impl LogsStore {
-    pub fn load<P: AsRef<Path>>(path: P) -> Self {
-        let path = path.as_ref();
-        if !path.exists() {
-            return LogsStore::default();
-        }
-        let db = std::fs::File::options()
-            .truncate(false)
-            .read(true)
-            .open(path)
-            .unwrap();
-        let store = serde_json::from_reader(db)
-            .map_err(|e| warn!("{e}"))
-            .unwrap_or_default();
-        info!("{:?}", store);
-        store
-    }
-    pub fn save<P: AsRef<Path>>(&self, path: P) {
-        if self.store.is_empty() {
-            return;
-        }
-        let path = path.as_ref();
-        let mut file = match std::fs::File::options()
-            .write(true)
-            .truncate(true)
-            .open(path)
-        {
-            Ok(file) => file,
-            Err(_) => std::fs::File::create_new(path).expect("Cannot create db"),
-        };
-        serde_json::to_writer(&mut file, &self)
-            .map_err(|e| warn!("{e}"))
-            .unwrap_or_default();
-        info!("{:?}", self);
-    }
-    #[instrument(level = "info")]
-    pub fn add(&mut self, log: ProjectLog) {
-        let ProjectLog { project, content } = log;
-        if let Some(list) = self.store.get_mut(&project) {
-            list.push(content);
-        } else {
-            self.store.insert(project, vec![content]);
-        }
-    }
-    // #[instrument(level = "info")]
-    // pub fn log(&mut self, project: ProjectId, log: Text) {
-    //     if let Some(list) = self.store.get_mut(&project) {
-    //         list.push(content);
-    //     } else {
-    //         self.store.insert(project, vec![content]);
-    //     }
-    // }
-    // pub fn upd(&mut self, log: Log);
-    // pub fn share(&mit self, log: LogId, user: UserId) -> StoreResult<()> {
-    // }
-    #[instrument(level = "info")]
-    pub fn get(&self, project: String, page: &Page) -> Paged<String> {
-        use core::pagination::Paginable;
-        self.store
-            .get(&project)
-            .map(|list| list.get_page(page))
-            .unwrap_or_default()
-    }
-}
