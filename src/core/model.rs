@@ -239,7 +239,7 @@ impl Metadata {
     }
 }
 #[derive(Debug, Clone, Display)]
-#[display("#{id} - by {} - {text}\n", meta.author)]
+#[display("Log #{id} by user {}: {text}", meta.author)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type, sqlx::FromRow))]
 pub struct Log {
     id: EntryId,
